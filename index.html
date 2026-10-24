@@ -27,6 +27,7 @@
   --accent: #d79c62; --accent-soft: #3a2b1d; --silver: #a7b6bb;
   --e0: #9aa49e; --e1: #6cc165; --e2: #66a3ea; --e3: #b48ae6; --e4: #e3b341; --warn: #e07a68; color-scheme: dark }
 * { box-sizing: border-box }
+[hidden] { display: none !important }
 body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--body);
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 32px }
 header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; max-width: 1180px; margin: 0 auto 14px }
@@ -82,6 +83,47 @@ td .id { display: block; font: .75rem var(--mono); color: var(--muted) }
 .note.err { color: var(--warn) }
 .empty { color: var(--muted); padding: 24px 12px; text-align: center }
 footer { max-width: 1180px; margin: 20px auto 0; font-size: .8rem; color: var(--muted) }
+.ico { flex: none; object-fit: contain }
+.row .ico { margin: -4px 0 }
+.title { display: flex; gap: 14px; align-items: center }
+.mat { display: flex; gap: 10px; align-items: center }
+nav.tabs { display: flex; gap: 4px; max-width: 1180px; margin: 0 auto 18px; border-bottom: 1px solid var(--line); overflow-x: auto }
+nav.tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 9px 14px; color: var(--muted); font: 500 1rem var(--body); white-space: nowrap }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent) }
+nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px }
+.path { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px }
+.path-head { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: end; justify-content: space-between }
+.path-head h2 { font: 700 1.5rem/1.15 var(--display); margin: 0 }
+.path-head p { margin: 4px 0 0; color: var(--muted); max-width: 60ch }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; min-width: 180px; flex: 1; max-width: 320px }
+.bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s }
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none } }
+.barlabel { font: .85rem var(--mono); color: var(--muted) }
+.stage { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px }
+.stage > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 8px; max-width: none }
+.stage h3 { font: 700 1.15rem var(--display); margin: 0 }
+.stage .why { color: var(--muted); font-size: .92rem; margin: 0 0 10px }
+.stage .done-count { font: .8rem var(--mono); color: var(--muted); white-space: nowrap }
+.stage.complete { border-color: var(--accent) }
+.stage.complete .done-count { color: var(--accent) }
+.step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px 10px; padding: 10px 0; border-top: 1px solid var(--line) }
+.step input[type=checkbox] { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent) }
+.step label { font-weight: 500; cursor: pointer }
+.step.checked label { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line) }
+.step .detail { grid-column: 2; font-size: .93rem; color: var(--muted) }
+.step .detail ul { margin: 4px 0 0; padding-left: 18px }
+.step .detail b { color: var(--ink); font-weight: 500 }
+.step .field { grid-column: 2; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: .9rem }
+.step .field input { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; width: 16rem; max-width: 100% }
+.mono { font-family: var(--mono) }
+.goal { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px }
+.goal label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted) }
+.goal input { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; font: 1rem var(--mono); width: 100% }
+.goal .out { font-size: .95rem; grid-column: 1 / -1 }
+.goal .out b { font-family: var(--mono); font-weight: 500 }
+.next { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-radius: 10px; padding: 14px 18px }
+.next .primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500 }
+.reset { align-self: flex-start; font-size: .85rem; color: var(--muted) }
 </style>
 </head>
 <body>
@@ -98,6 +140,16 @@ footer { max-width: 1180px; margin: 20px auto 0; font-size: .8rem; color: var(--
   </div>
 </header>
 
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <button role="tab" id="tab-recipes" data-view="recipes" aria-selected="true">Recipes</button>
+  <button role="tab" id="tab-crafting" data-view="crafting" aria-selected="false">Crafting path<span class="pct" id="pct-crafting"></span></button>
+  <button role="tab" id="tab-island" data-view="island" aria-selected="false">Island path<span class="pct" id="pct-island"></span></button>
+</nav>
+
+<section id="view-crafting" class="path" hidden></section>
+<section id="view-island" class="path" hidden></section>
+
+<div id="view-recipes">
 <div class="wrap">
   <section class="index" aria-label="Find an item">
     <div class="filters">
@@ -111,6 +163,7 @@ footer { max-width: 1180px; margin: 20px auto 0; font-size: .8rem; color: var(--
   <main class="card" id="card"><p class="empty">Loading recipes…</p></main>
 </div>
 <footer>Recipes from the game files (ao-data/ao-bin-dumps). Prices from the Albion Online Data Project, uploaded by players running the Albion Data Client. The quantities are per craft, before your return rate.</footer>
+</div>
 
 <script>
 const AODP = "https://europe.albion-online-data.com/api/v2/stats/prices/";
@@ -118,7 +171,7 @@ const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
 };
-let DB = null, current = null, level = "0";
+let DB = null, current = null, level = "0", view = "recipes";
 const $ = id => document.getElementById(id);
 const cityEl = $("city");
 cityEl.value = store.get("city") || "Fort Sterling";
@@ -127,6 +180,7 @@ const pretty = s => (s || "other").replace(/_/g, " ").replace(/\b\w/g, c => c.to
 const nameOf = id => DB.names[id.split("@")[0]] || pretty(id.split("@")[0].replace(/^T\d_/, ""));
 const fmt = n => n == null ? "—" : Math.round(n).toLocaleString("en-US");
 const priceId = (id, lvl) => lvl === "0" ? id : id + "@" + lvl;
+const icon = (id, px) => `<img class="ico" src="https://render.albiononline.com/v1/item/${encodeURIComponent(id)}.png?size=${px * 2}&quality=1" width="${px}" height="${px}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`;
 const QUALITY = { 2: "Good", 3: "Outstanding", 4: "Excellent", 5: "Masterpiece" };
 
 function ageText(iso) {
@@ -167,7 +221,7 @@ function renderList() {
     const b = document.createElement("button");
     b.className = "row"; b.dataset.id = e.id; b.setAttribute("role", "listitem");
     if (current === e.id) b.setAttribute("aria-current", "true");
-    b.innerHTML = `<span class="tier">T${e.it.t || "–"}</span><span class="nm"></span><span class="sub"></span>`;
+    b.innerHTML = `${icon(e.id, 32)}<span class="tier">T${e.it.t || "–"}</span><span class="nm"></span><span class="sub"></span>`;
     b.querySelector(".nm").textContent = e.name;
     b.querySelector(".sub").textContent = pretty(e.it.s);
     b.onclick = () => open(e.id, true);
@@ -179,7 +233,7 @@ function renderList() {
 function open(id, scroll) {
   current = id; level = DB.items[id].r[level] ? level : "0";
   store.set("last", id);
-  try { history.replaceState(null, "", "#" + id) } catch {}
+  if (view === "recipes") try { history.replaceState(null, "", "#" + id) } catch {}
   document.querySelectorAll(".row").forEach(r => r.dataset.id === id ? r.setAttribute("aria-current", "true") : r.removeAttribute("aria-current"));
   renderCard();
   if (scroll && matchMedia("(max-width: 760px)").matches) $("card").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -195,7 +249,7 @@ function renderCard() {
   const card = $("card");
   const lv = Object.keys(it.r);
   const own = cell(priceId(current, level));
-  let html = `<h2></h2><div class="meta">Tier ${it.t || "–"} · ${pretty(it.c)} · ${pretty(it.s)}</div>`;
+  let html = `<div class="title">${icon(priceId(current, level), 72)}<div><h2></h2><div class="meta">Tier ${it.t || "–"} · ${pretty(it.c)} · ${pretty(it.s)}</div></div></div>`;
   if (lv.length > 1) html += `<div class="ench" role="group" aria-label="Enchantment">${lv.map(l => `<button class="l${l}" data-l="${l}" aria-pressed="${l === level}">${it.t ? it.t + "." + l : "." + l}</button>`).join("")}</div>`;
   recs.forEach((r, i) => {
     const rows = r.m.map(([mid, cnt, art]) => cell(mid, cnt, art));
@@ -203,7 +257,7 @@ function renderCard() {
     html += `<div class="recipe"><h3>${recs.length > 1 ? (i === 0 ? "Recipe" : "Alternative recipe " + i) : "Recipe"}</h3>
       <div class="facts"><span>Makes <b>${r.n}</b> per craft</span>${r.f ? `<span>Focus <b>${fmt(r.f)}</b></span>` : ""}${r.s ? `<span>Silver <b>${fmt(r.s)}</b></span>` : ""}${r.u ? `<span>Or upgrade from .${+level - 1}: <b>${r.u[1]}</b> ${esc(nameOf(r.u[0]))}</span>` : ""}</div>
       <div class="tablewrap"><table><thead><tr><th>Material</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Line</th></tr></thead><tbody>
-      ${rows.map(x => `<tr><td>${DB.items[x.id.split("@")[0]] && !x.id.includes("_LEVEL") ? `<button class="link" data-open="${x.id.split("@")[0]}">${esc(nameOf(x.id))}</button>` : esc(nameOf(x.id))}${x.isArt ? '<span class="art" title="Artifacts are used up and never returned">not returned</span>' : ""}<span class="id">${x.id}</span></td>
+      ${rows.map(x => `<tr><td><div class="mat">${icon(x.id, 40)}<div>${DB.items[x.id.split("@")[0]] && !x.id.includes("_LEVEL") ? `<button class="link" data-open="${x.id.split("@")[0]}">${esc(nameOf(x.id))}</button>` : esc(nameOf(x.id))}${x.isArt ? '<span class="art" title="Artifacts are used up and never returned">not returned</span>' : ""}<span class="id">${x.id}</span></div></div></td>
         <td class="num">${x.count}</td><td class="num">${fmt(x.price)}${x.age ? `<span class="age ${x.age.old ? "old" : ""}">${x.age.text}</span>` : ""}</td><td class="num">${x.price ? fmt(x.price * x.count) : "—"}</td></tr>`).join("")}
       <tr class="total"><td colspan="3">Materials at full price${r.n > 1 ? ` (÷ ${r.n} = ${total ? fmt(total / r.n) : "—"} each)` : ""}</td><td class="num">${fmt(total)}</td></tr>
       </tbody></table></div></div>`;
@@ -268,6 +322,159 @@ $("q").addEventListener("input", renderList);
 $("cat").addEventListener("change", renderList);
 $("tier").addEventListener("change", renderList);
 cityEl.addEventListener("change", () => { store.set("city", cityEl.value); if (DB) renderCard() });
+const ISLAND_COST = 6457500;
+const PATHS = {
+  crafting: {
+    title: "Crafting path",
+    intro: "From an empty Destiny Board to steady crafting profit. Based on the Nendys crafting masterclass; numbers were current when it was recorded.",
+    next: { text: "Saved enough silver for an island?", to: "island", label: "Go to the island path" },
+    stages: [
+      { title: "Get set up", why: "Crafting is the last of three steps: gathering, refining, crafting. You can skip the first two and buy everything refined on the market.", steps: [
+        { id: "c-board", title: "Open the Destiny Board and show locked nodes", detail: "Press <b>B</b> and tick <b>Show locked</b>. The left side is combat; the right side is the economy: <b>Blacksmith, Hunter, Mage, Toolmaker</b> and <b>Refining</b>." },
+        { id: "c-ox", title: "Get an ox for carrying materials", detail: "Materials are heavy. A horse or mule can't carry a batch of planks or bars; an ox can." },
+        { id: "c-premium", title: "Decide on premium", detail: "With premium the market tax is <b>4%</b> instead of <b>8%</b>, and you get focus to boost your return rate. Everyone pays the <b>2.5%</b> listing fee either way." }
+      ]},
+      { title: "Unlock tier 3", why: "Tier 2 is only for unlocking. Don't worry about profit yet.", steps: [
+        { id: "c-tree", title: "Pick a crafting tree", detail: "Mage: fire staffs, tomes, cloth gear. Hunter: bows, leather gear. Blacksmith: swords, axes, plate. Toolmaker: tools, bags, off-hands.", field: { label: "My tree", placeholder: "e.g. Hunter" } },
+        { id: "c-t2", title: "Craft about 15 tier 2 items in that tree", detail: "Any item in the tree counts. Example: a tier 2 bow needs <b>32 tier 2 planks</b>, so 15 bows need about <b>480 planks</b>. Look up the recipe in the Recipes tab, buy the materials and take them to the matching station (bows go to the Hunter's Lodge)." }
+      ]},
+      { title: "Choose a specialty and reach tier 4", why: "From tier 3 on, only crafting that exact item line levels it. There are no wrong choices; every line can be profitable.", steps: [
+        { id: "c-line", title: "Pick one item line to specialize in", detail: "For example arcane staffs, hoods or bows. Off-meta lines are fine.", field: { label: "My item line", placeholder: "e.g. Leather hoods" } },
+        { id: "c-t3", title: "Level that line to tier 4", detail: "Craft tier 3 items of that line only. Tier 3 items rarely sell for profit because players only use them to level up. <b>Studying</b> an item destroys it for <b>275%</b> of its crafting fame (one study ≈ three crafts), which is often the cheaper way up to tier 4. Don't lose much silver just to gain levels." }
+      ]},
+      { title: "Learn the crafting math", why: "The one calculation that decides whether an item is worth making.", steps: [
+        { id: "c-rr", title: "Know your return rate", detail: "Part of the materials comes back after each craft.<ul><li>Island: <b>0%</b> (never craft there)</li><li>Royal city: about <b>15%</b></li><li>City with a bonus for that item: about <b>25%</b></li><li>With focus: close to <b>50%</b></li><li>Hideout: about <b>40%</b></li></ul>" },
+        { id: "c-formula", title: "Work out the real cost", detail: "<b>Real cost = materials × (1 − return rate) + artifact.</b> Artifacts are never returned. Then compare with the market price. Video example, Hellion Hood: 8 leather at about 2,100 = 17,000 × 85% = 14,450, plus the Demonhide Padding artifact. Check it in the Recipes tab.", link: { item: "T4_HEAD_LEATHER_HELL", text: "Open the Hellion Hood recipe" } },
+        { id: "c-fees", title: "Add the fees", detail: "<b>Station fee</b>: press <b>N</b> for the city map and hover the stations; use the cheapest one. <b>Market</b>: 4% or 8% tax plus the 2.5% listing fee. About 10% in total, which is fine for the right items." }
+      ]},
+      { title: "Make your first profit", why: "Tier 4 and 5 are where most profitable items are. Higher tiers only mean more items to choose from.", steps: [
+        { id: "c-find", title: "Find candidate items", detail: "Go through the Destiny Board from the bottom up, or inspect what other players are wearing. Artifact items face less competition because nobody can mass-produce them. A big jump in price overnight (50k to 100k) is almost always a sign of profit." },
+        { id: "c-volume", title: "Check how many sell per day", detail: "Open the item's sell chart and pick 4 weeks; each candle is one day. Craft only <b>20–30% of the daily volume</b>, so your items sell from one day to the next 9 times out of 10." },
+        { id: "c-local", title: "Buy, craft and sell in the same city", detail: "If it's profitable in Fort Sterling, buy the materials in Fort Sterling, craft there and sell there. Hauling to a bonus city for a few percent turns crafting into a job." },
+        { id: "c-sell", title: "List with sell orders and stay patient", detail: "Every re-list costs another 2.5%. Only change your price if you're completely buried and won't sell any time soon. Use <b>buy orders</b> to get materials cheaper if you can wait." },
+        { id: "c-first", title: "Sell your first profitable batch", detail: "Write down what worked so you can repeat it.", field: { label: "Item that made money", placeholder: "e.g. 4.0 Hellion Hood" } }
+      ]},
+      { title: "Grow", why: "Crafting is a means to an end: silver for the things you actually want.", steps: [
+        { id: "c-spec", title: "Know mastery vs specialization", detail: "<b>Mastery</b> unlocks higher tiers. <b>Specialization</b> raises quality and lowers focus cost, so it only matters for items you craft with focus." },
+        { id: "c-focus", title: "Use focus on your best item", detail: "Focus pushes the return rate from about 25% to nearly 50%. Spend it on the item that earns the most silver per point of focus." },
+        { id: "c-island", title: "Save up for an island", detail: "A fully upgraded island costs about <b>6.46M</b>. Track your savings in the Island path." }
+      ]}
+    ]
+  },
+  island: {
+    title: "Island path",
+    intro: "Turning a personal island into daily silver. Based on Psion's island video; prices were current when it was recorded.",
+    goal: true,
+    stages: [
+      { title: "Get the island", why: "Islands are bought from the island merchant in a city.", steps: [
+        { id: "i-premium", title: "Have had 7 days of premium on this character", detail: "It has to have happened at some point, not right now." },
+        { id: "i-buy", title: "Buy the island and upgrade it to level 6", detail: "About <b>6,457,500</b> silver in total for <b>16 plots</b>. Each plot can take any building on a personal island; guild islands only allow houses." },
+        { id: "i-keep", title: "Keep premium while you farm", detail: "Premium doubles every harvest. Without it a farm makes about 2.5k a day instead of 23k." }
+      ]},
+      { title: "Fill it with farms", why: "Farms and herb gardens are the best earner that needs no focus and no big investment.", steps: [
+        { id: "i-build", title: "Build farms or herb gardens on all 16 plots", detail: "Each costs only <b>15 rough stone and 15 rough logs</b>. Don't build crafting or refining stations: the island has a <b>0%</b> return rate." },
+        { id: "i-crop", title: "Plant the most valuable crop or herb", detail: "Check prices first; tier 7 herbs and several others were around 450–500 each. Each plot gives about <b>10 crops</b> with premium. Seeds cost about <b>2,000 per plot</b> on average once lost seeds are counted, at every tier." },
+        { id: "i-math", title: "Expect about 23k per farm per day", detail: "450 × 10 crops + worm chance − 2,000 seed cost ≈ <b>2.5k per plot</b>, × 9 plots ≈ <b>23k per farm</b>. 16 farms ≈ <b>368k a day</b>, which pays back the island in about <b>18 days</b>." }
+      ]},
+      { title: "Daily routine", why: "About 10 minutes a day.", steps: [
+        { id: "i-harvest", title: "Harvest and replant every 22 hours", detail: "Buy back any seeds you lost from the island vendor." },
+        { id: "i-water", title: "Don't spend focus on watering", detail: "Watering guarantees your seed back but costs a lot of focus. Use that focus to cook food or brew potions from your crops instead." },
+        { id: "i-avoid", title: "Skip the money-losing options", detail: "Butchering animals loses about 600 tax per animal and comes out worse than crops. Raising mounts loses silver without focus; only stags and moose earn anything (about 4–4.5k a day with focus). Eggs and milk give about 16k per pasture." }
+      ]},
+      { title: "Upgrade to houses when you're rich", why: "Houses with laborers earn the most, about 1M a day for a full island, but cost about 173M to set up.", steps: [
+        { id: "i-house", title: "Build tier 8 houses", detail: "Per house: about <b>6.4M</b> in stone blocks and logs, a table (<b>1.4M</b>), three beds (<b>2.25M</b>) and three laborers (<b>750k</b>): about <b>10.8M</b>." },
+        { id: "i-journals", title: "Run crafting journals", detail: "Tier 7 and 8 crafting journals are easy to fill and to buy. Gathering journals are hard to fill above tier 5. A house earns about <b>62k a day</b>, and laborers don't need premium or focus. Furniture must be one tier above the journal for 150% returns (tier 8 journals cap at 120%)." },
+        { id: "i-refund", title: "Know you can get most of it back", detail: "Demolishing a house returns 90% of its materials, and furniture and laborers can be resold. So the real payback is about 3 weeks." },
+        { id: "i-second", title: "Consider a second island", detail: "It costs about <b>46.5M</b> and takes about <b>72 days</b> to pay back with farms." }
+      ]}
+    ]
+  }
+};
+
+function progress() { return store.get("progress") || { checked: {}, fields: {} } }
+function saveProgress(p) { store.set("progress", p); updatePct() }
+function pathPct(key) {
+  const p = progress(), steps = PATHS[key].stages.flatMap(s => s.steps);
+  return Math.round(100 * steps.filter(s => p.checked[s.id]).length / steps.length);
+}
+function updatePct() {
+  for (const key of Object.keys(PATHS)) {
+    const pct = pathPct(key);
+    $("pct-" + key).textContent = pct ? pct + "%" : "";
+    const bar = document.querySelector(`#view-${key} .bar i`); if (bar) bar.style.width = pct + "%";
+    const lbl = document.querySelector(`#view-${key} .barlabel`); if (lbl) lbl.textContent = pct + "% done";
+  }
+}
+
+function renderPath(key) {
+  const P = PATHS[key], p = progress(), el = $("view-" + key);
+  let html = `<div class="path-head"><div><h2>${P.title}</h2><p>${P.intro}</p></div><div style="display:flex;gap:10px;align-items:center;flex:1;justify-content:flex-end"><div class="bar"><i></i></div><span class="barlabel"></span></div></div>`;
+  if (P.goal) {
+    const f = p.fields;
+    html += `<div class="stage"><header><h3>Silver goal</h3></header><div class="goal">
+      <label for="g-silver">Silver saved<input id="g-silver" inputmode="numeric" data-field="g-silver" value="${esc(f["g-silver"] || "")}" placeholder="e.g. 613000"></label>
+      <label for="g-daily">Crafting profit per day<input id="g-daily" inputmode="numeric" data-field="g-daily" value="${esc(f["g-daily"] || "")}" placeholder="e.g. 250000"></label>
+      <p class="out" id="g-out"></p></div></div>`;
+  }
+  P.stages.forEach(s => {
+    const done = s.steps.filter(x => p.checked[x.id]).length;
+    html += `<section class="stage${done === s.steps.length ? " complete" : ""}"><header><h3>${s.title}</h3><span class="done-count">${done} / ${s.steps.length}</span></header><p class="why">${s.why}</p>`;
+    s.steps.forEach(x => {
+      html += `<div class="step${p.checked[x.id] ? " checked" : ""}"><input type="checkbox" id="${x.id}" data-step="${x.id}"${p.checked[x.id] ? " checked" : ""}><label for="${x.id}">${x.title}</label>
+        <div class="detail">${x.detail}${x.link ? ` <button class="link" data-item="${x.link.item}">${x.link.text}</button>` : ""}</div>
+        ${x.field ? `<div class="field"><label for="f-${x.id}">${x.field.label}</label><input id="f-${x.id}" data-field="f-${x.id}" value="${esc(p.fields["f-" + x.id] || "")}" placeholder="${x.field.placeholder}"></div>` : ""}</div>`;
+    });
+    html += `</section>`;
+  });
+  if (P.next) html += `<div class="next"><span>${P.next.text}</span><button class="primary" data-go="${P.next.to}">${P.next.label}</button></div>`;
+  html += `<button class="reset" data-reset="${key}">Clear this path's progress</button>`;
+  el.innerHTML = html;
+  el.querySelectorAll("[data-step]").forEach(cb => cb.onchange = () => {
+    const pr = progress(); pr.checked[cb.dataset.step] = cb.checked || undefined; saveProgress(pr); renderPath(key);
+  });
+  el.querySelectorAll("[data-field]").forEach(inp => inp.oninput = () => {
+    const pr = progress(); pr.fields[inp.dataset.field] = inp.value; saveProgress(pr); if (P.goal) goalOut();
+  });
+  el.querySelectorAll("[data-item]").forEach(b => b.onclick = () => { show("recipes"); open(b.dataset.item) });
+  el.querySelectorAll("[data-go]").forEach(b => b.onclick = () => { show(b.dataset.go); scrollTo(0, 0) });
+  const reset = el.querySelector("[data-reset]");
+  reset.onclick = () => {
+    if (reset.dataset.armed) {
+      const pr = progress(); P.stages.flatMap(s => s.steps).forEach(x => { delete pr.checked[x.id]; delete pr.fields["f-" + x.id] });
+      saveProgress(pr); renderPath(key);
+    } else { reset.dataset.armed = "1"; reset.textContent = "Click again to clear all checkmarks and notes in this path" }
+  };
+  if (P.goal) goalOut();
+  updatePct();
+}
+
+function goalOut() {
+  const num = v => +String(v || "").replace(/[^\d]/g, "") || 0;
+  const f = progress().fields, have = num(f["g-silver"]), daily = num(f["g-daily"]), out = $("g-out");
+  if (!out) return;
+  if (!have && !daily) { out.textContent = `A fully upgraded island costs about ${fmt(ISLAND_COST)} silver. Enter your savings to see how far you are.`; return }
+  const left = ISLAND_COST - have;
+  if (left <= 0) { out.innerHTML = `You have enough for the island, with <b>${fmt(-left)}</b> to spare for seeds and farms.`; return }
+  out.innerHTML = `<b>${Math.floor(100 * have / ISLAND_COST)}%</b> of the island saved. <b>${fmt(left)}</b> to go` + (daily ? `, about <b>${Math.ceil(left / daily)} days</b> at ${fmt(daily)} a day.` : ".");
+}
+
+function show(v) {
+  view = v;
+  for (const k of ["recipes", "crafting", "island"]) {
+    $("view-" + k).hidden = k !== v;
+    $("tab-" + k).setAttribute("aria-selected", k === v);
+  }
+  if (v !== "recipes") renderPath(v);
+  const hash = v === "recipes" ? current : v;
+  if (hash) try { history.replaceState(null, "", "#" + hash) } catch {}
+  store.set("view", v);
+}
+document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => show(b.dataset.view));
+{
+  const h = location.hash.slice(1);
+  show(PATHS[h] ? h : (h ? "recipes" : (store.get("view") || "recipes")));
+}
+
 boot().catch(() => { $("card").innerHTML = '<p class="empty">The recipe list didn\'t load. Reload the page to try again.</p>' });
 </script>
 </body>
