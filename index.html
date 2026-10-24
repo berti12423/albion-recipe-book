@@ -83,6 +83,14 @@ td .id { display: block; font: .75rem var(--mono); color: var(--muted) }
 .note.err { color: var(--warn) }
 .empty { color: var(--muted); padding: 24px 12px; text-align: center }
 footer { max-width: 1180px; margin: 20px auto 0; font-size: .8rem; color: var(--muted) }
+.unlock { margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px }
+.unlock summary { font: 500 .78rem var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); cursor: pointer }
+.unlock ol { margin: 10px 0 6px; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; font-size: .95rem }
+.unlock li::marker { color: var(--accent); font-family: var(--mono) }
+.unlock .goal-step { color: var(--ink) }
+.unlock .goal-step b { color: var(--accent) }
+.unlock a { color: var(--accent) }
+.unlock .note { margin: 4px 0 0 }
 .ico { flex: none; object-fit: contain }
 .row .ico { margin: -4px 0 }
 .title { display: flex; gap: 14px; align-items: center }
@@ -251,6 +259,7 @@ function renderCard() {
   const own = cell(priceId(current, level));
   let html = `<div class="title">${icon(priceId(current, level), 72)}<div><h2></h2><div class="meta">Tier ${it.t || "–"} · ${pretty(it.c)} · ${pretty(it.s)}</div></div></div>`;
   if (lv.length > 1) html += `<div class="ench" role="group" aria-label="Enchantment">${lv.map(l => `<button class="l${l}" data-l="${l}" aria-pressed="${l === level}">${it.t ? it.t + "." + l : "." + l}</button>`).join("")}</div>`;
+  html += unlockHtml(current, it);
   recs.forEach((r, i) => {
     const rows = r.m.map(([mid, cnt, art]) => cell(mid, cnt, art));
     const total = rows.every(x => x.price) ? rows.reduce((s, x) => s + x.price * x.count, 0) : null;
@@ -271,6 +280,50 @@ function renderCard() {
   card.querySelectorAll("[data-open]").forEach(b => b.onclick = () => open(b.dataset.open, true));
   $("load").onclick = () => loadPrices(true);
   loadPrices(false);
+}
+
+// Destiny Board crafting nodes, from the Albion wiki crafter pages (checked 24 Oct 2026).
+// Every crafter node unlocks tiers 4–8 at levels 1, 10, 30, 60 and 100; only the fame for level 1 differs.
+const HUNTER = "Hunter's Lodge", WARRIOR = "Warrior's Forge", MAGE = "Mage's Tower", TOOL = "Toolmaker";
+const NODES = {
+  bow: [HUNTER, "Bow Crafter", 14424], dagger: [HUNTER, "Dagger Crafter", 14424], spear: [HUNTER, "Spear Crafter", 14424],
+  quarterstaff: [HUNTER, "Quarterstaff Crafter", 14424], naturestaff: [HUNTER, "Nature Staff Crafter", 14424], torchtype: [HUNTER, "Torch Crafter", 3606],
+  leather_helmet: [HUNTER, "Leather Hood Crafter", 3606], leather_armor: [HUNTER, "Leather Jacket Crafter", 3606], leather_shoes: [HUNTER, "Leather Shoes Crafter", 3606],
+  sword: [WARRIOR, "Sword Crafter", 14424], axe: [WARRIOR, "Battleaxe Crafter", 14424], mace: [WARRIOR, "Mace Crafter", 14424],
+  hammer: [WARRIOR, "Hammer Crafter", 14424], crossbow: [WARRIOR, "Crossbow Crafter", 14424], knuckles: [WARRIOR, "War Gloves Crafter", 14424],
+  shieldtype: [WARRIOR, "Shield Crafter", 3606], plate_helmet: [WARRIOR, "Plate Helmet Crafter", 3606], plate_armor: [WARRIOR, "Plate Armor Crafter", 7212], plate_shoes: [WARRIOR, "Plate Boots Crafter", 3606],
+  firestaff: [MAGE, "Fire Staff Crafter", 14424], holystaff: [MAGE, "Holy Staff Crafter", 14424], arcanestaff: [MAGE, "Arcane Staff Crafter", 14424],
+  froststaff: [MAGE, "Frost Staff Crafter", 14424], cursestaff: [MAGE, "Cursed Staff Crafter", 14424], booktype: [MAGE, "Tome Crafter", 14424],
+  cloth_helmet: [MAGE, "Cloth Cowl Crafter", 3606], cloth_armor: [MAGE, "Cloth Robe Crafter", 3606], cloth_shoes: [MAGE, "Cloth Sandals Crafter", 3606],
+  bags: [TOOL, "Bag Tailor", 14424], satchels: [TOOL, "Bag Tailor", 14424], accessoires_capes_capes: [TOOL, "Cape Tailor", 14424],
+  "gathering/fiber": [TOOL, "Harvester Crafter", 14424], "gathering/fish": [TOOL, "Fisherman Crafter", 14424], "gathering/hide": [TOOL, "Skinner Crafter", 14424],
+  "gathering/ore": [TOOL, "Miner Crafter", 14424], "gathering/rock": [TOOL, "Quarrier Crafter", 14424], "gathering/wood": [TOOL, "Lumberjack Crafter", 14424],
+  shapeshifterstaff: [null, "Shapeshifter Staff Crafter", null]
+};
+const TIER_LEVEL = { 4: 1, 5: 10, 6: 30, 7: 60, 8: 100 };
+const wiki = page => `<a href="https://wiki.albiononline.com/wiki/${encodeURIComponent(page.replace(/ /g, "_"))}" target="_blank" rel="noopener">${esc(page)}</a>`;
+
+function nodeFor(id, it) {
+  if (/BAIT|TRACKING/.test(id)) return null;
+  if (it.c === "other" && /SIEGEHAMMER/.test(id)) return [TOOL, "Siege Hammer Crafter", 14424];
+  return NODES[it.c + "/" + it.s] || NODES[it.s] || null;
+}
+
+function unlockHtml(id, it) {
+  const node = nodeFor(id, it), t = it.t;
+  if (!node || t < 2) return `<details class="unlock"><summary>Unlock path</summary><p class="note">The wiki doesn't list a Destiny Board path for this kind of item yet. Hover the item's node on your Destiny Board (B) to see it.</p></details>`;
+  const [station, name, fame1] = node;
+  const journeyman = station === TOOL ? "Journeyman Toolmaker" : `Journeyman ${station} Crafter`;
+  const steps = [`<li><b>Trainee Craftsman</b>: the starting crafting node. Unlocks tier 2.</li>`];
+  if (t >= 3) steps.push(station
+    ? `<li><b>${esc(journeyman)}</b>: 1 level, <b>480 fame</b> from crafting any tier 2 item at the ${esc(station)}. Unlocks tier 3.</li>`
+    : `<li><b>The journeyman node for this crafting station</b> (not on the wiki yet). Unlocks tier 3.</li>`);
+  for (let tier = 4; tier <= t; tier++) {
+    const lvl = TIER_LEVEL[tier], last = tier === t;
+    steps.push(`<li${last ? ' class="goal-step"' : ""}><b>${wiki(name)} level ${lvl}</b>${tier === 4 ? (fame1 ? `: <b>${fmt(fame1)} fame</b> from crafting tier 3 items of this type` : "") : ""}. Unlocks tier ${tier}${last ? ", <b>this item</b>" : ""}.</li>`);
+  }
+  return `<details class="unlock" open><summary>Unlock path to tier ${t}</summary><ol>${steps.join("")}</ol>
+    <p class="note">${station ? `Craft at the <b>${esc(station)}</b>. ` : "Not on the wiki yet; the station and fame are unconfirmed. "}Enchanted versions need the same level. Fame for levels after the first isn't published; hover the node on your Destiny Board (B) to see it. Source: Albion wiki.</p></details>`;
 }
 
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])) }
