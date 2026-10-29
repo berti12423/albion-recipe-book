@@ -190,16 +190,23 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 
 <section id="view-finder" class="finder" hidden>
   <div class="path-head"><div><h2>Profit finder</h2>
-    <p>Scans every item in a category and ranks them by profit after your return rate, tax and fees. Materials are bought and the item is sold in the city you picked at the top. For the Black Market, materials are priced in Caerleon.</p></div></div>
+    <p>Scans every craftable item and ranks them by profit after your return rate, tax and fees. Choose to buy, craft and sell in the city picked at the top, or to travel: buy all the materials in the cheapest city and sell in the best one.</p></div></div>
   <div class="controls">
-    <select id="f-cat" aria-label="Category"></select>
-    <select id="f-tier" aria-label="Tier"><option value="">Tiers 4–6</option><option value="4">Tier 4</option><option value="5">Tier 5</option><option value="6">Tier 6</option><option value="7">Tier 7</option><option value="8">Tier 8</option></select>
-    <select id="f-ench" aria-label="Enchantment"><option value="">Enchant .0–.3</option><option value="0">.0 only</option><option value="1">.1 only</option><option value="2">.2 only</option><option value="3">.3 only</option></select>
+    <select id="f-mode" aria-label="Where to buy and sell"><option value="same">Same city: buy, craft and sell in the city at the top</option><option value="travel">Travel: buy in the cheapest city, sell in the best</option></select>
+    <label class="chk" id="f-bm-wrap"><input type="checkbox" id="f-bm"> Include Caerleon and the Black Market (red-zone trip)</label>
+  </div>
+  <div class="controls">
+    <select id="f-cat" aria-label="Category"><option value="">All categories</option></select>
+    <select id="f-tier" aria-label="Tier"><option value="">All tiers</option><option value="1">Tier 1</option><option value="2">Tier 2</option><option value="3">Tier 3</option><option value="4">Tier 4</option><option value="5">Tier 5</option><option value="6">Tier 6</option><option value="7">Tier 7</option><option value="8">Tier 8</option></select>
+    <select id="f-ench" aria-label="Enchantment"><option value="">All enchantments</option><option value="0">.0</option><option value="1">.1</option><option value="2">.2</option><option value="3">.3</option><option value="4">.4</option></select>
     <select id="f-sort" aria-label="Sort by"><option value="profit">Sort by profit per item</option><option value="margin">Sort by % on cost</option><option value="day">Sort by profit per day</option></select>
-    <label class="chk"><input type="checkbox" id="f-fresh" checked> Hide prices older than 24 h</label>
+    <label class="chk"><input type="checkbox" id="f-fresh" checked> Ignore prices older than 24 h</label>
+    <label class="chk"><input type="checkbox" id="f-sane" checked> Check the top items against real sales</label>
+    <label class="chk">Min sold / day <input id="f-vol" type="number" min="0" step="1" value="1" style="width:4.5rem;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-family:var(--mono)"></label>
+    <label class="chk">Max % on cost <input id="f-max" type="number" min="0" step="50" value="300" style="width:5.5rem;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font-family:var(--mono)"></label>
     <button class="primary" id="f-scan">Scan prices</button>
   </div>
-  <p class="note" id="f-note">Pick a category and press Scan. A scan asks the price server for every item and material, so big categories take a few seconds.</p>
+  <p class="note" id="f-note">Pick your filters and press Scan. Prices come from the Albion Online Data Project; scanning everything takes about a minute, a single category a few seconds.</p>
   <div class="card"><div class="tablewrap" id="f-out"></div></div>
 </section>
 
@@ -249,38 +256,44 @@ function ageText(iso) {
 
 // Prices are cached per market: "p:<location>|<id>" = { s: cheapest sell order, d, q, b: black market normal-quality buy order, bd }.
 const AODP_HISTORY = "https://europe.albion-online-data.com/api/v2/stats/history/";
-const getPrice = (loc, id) => store.get("p:" + loc + "|" + id);
-const isBM = () => cityEl.value === "Black Market";
+// A full finder scan holds far more prices than localStorage fits, so scans live in memory and the recipe card also caches to storage.
+const PRICES = new Map();
+const getPrice = (loc, id) => PRICES.get(loc + "|" + id) ?? store.get("p:" + loc + "|" + id);
+const isBM = (loc = cityEl.value) => loc === "Black Market";
 const matLoc = () => isBM() ? "Caerleon" : cityEl.value;
+const ROYAL = ["Fort Sterling", "Martlock", "Thetford", "Lymhurst", "Bridgewatch", "Brecilien"];
+const anyPrice = () => true;
 
 // Profit settings, shared by the recipe card and the profit finder.
 const S = Object.assign({ rr: "15.2", premium: false, fee: 0 }, store.get("settings") || {});
 // Market tax (4% premium, 8% without) plus the 2.5% listing fee; selling straight into a black market buy order has no listing fee.
-const feeRate = () => (S.premium ? 0.04 : 0.08) + (isBM() ? 0 : 0.025);
+const feeRate = (loc = cityEl.value) => (S.premium ? 0.04 : 0.08) + (isBM(loc) ? 0 : 0.025);
 
-function salePrice(pid) {
-  const p = getPrice(cityEl.value, pid);
+function salePrice(pid, loc = cityEl.value, ok = anyPrice) {
+  const p = getPrice(loc, pid);
   if (!p) return null;
-  if (isBM()) return p.b ? { v: p.b, d: p.bd } : null;
-  return p.s ? { v: p.s, d: p.d, q: p.q } : null;
+  const v = isBM(loc) ? (p.b ? { v: p.b, d: p.bd } : null) : (p.s ? { v: p.s, d: p.d, q: p.q } : null);
+  return v && ok(v.d) ? v : null;
 }
 
 // Every way to get one item of this tier and enchantment: each recipe, plus buying the enchantment below and enchanting it.
-function craftOptions(id, lvl) {
-  const recs = DB.items[id].r[lvl], rr = +S.rr / 100, ml = matLoc();
+// All materials are bought in one market (ml); ok() can reject stale prices.
+function craftOptions(id, lvl, ml = matLoc(), ok = anyPrice) {
+  const recs = DB.items[id].r[lvl], rr = +S.rr / 100;
+  const buy = mid => { const p = getPrice(ml, mid); return p && p.s && ok(p.d) ? p.s : null };
   const opts = recs.map((r, i) => {
     let back = 0, gone = 0;
     for (const [mid, cnt, art] of r.m) {
-      const p = getPrice(ml, mid);
-      if (!p || !p.s) return { label: recipeLabel(recs, i), cost: null };
-      if (art) gone += p.s * cnt; else back += p.s * cnt;
+      const p = buy(mid);
+      if (p == null) return { label: recipeLabel(recs, i), cost: null };
+      if (art) gone += p * cnt; else back += p * cnt;
     }
     return { label: recipeLabel(recs, i), cost: (back * (1 - rr) + gone + (+S.fee || 0)) / r.n };
   });
   const u = recs[0].u;
   if (u && lvl !== "0") {
-    const prev = getPrice(ml, priceId(id, String(lvl - 1))), rune = getPrice(ml, u[0]);
-    opts.push({ label: `Buy the .${lvl - 1} and enchant it (${u[1]} ${nameOf(u[0])})`, cost: prev && prev.s && rune && rune.s ? prev.s + rune.s * u[1] : null, upgrade: true });
+    const prev = buy(priceId(id, String(lvl - 1))), rune = buy(u[0]);
+    opts.push({ label: `Buy the .${lvl - 1} and enchant it (${u[1]} ${nameOf(u[0])})`, cost: prev != null && rune != null ? prev + rune * u[1] : null, upgrade: true });
   }
   return opts;
 }
@@ -290,12 +303,23 @@ function recipeLabel(recs, i) {
   return "Craft with " + (art ? nameOf(art[0]) : "recipe " + (i + 1));
 }
 
-function evaluate(id, lvl) {
-  const opts = craftOptions(id, lvl), sale = salePrice(priceId(id, lvl));
+function evaluate(id, lvl, buyLoc = matLoc(), sellLoc = cityEl.value, ok = anyPrice) {
+  const opts = craftOptions(id, lvl, buyLoc, ok), sale = salePrice(priceId(id, lvl), sellLoc, ok);
   const best = opts.filter(o => o.cost != null).reduce((a, b) => !a || b.cost < a.cost ? b : a, null);
-  const net = sale ? sale.v * (1 - feeRate()) : null;
+  const net = sale ? sale.v * (1 - feeRate(sellLoc)) : null;
   const profit = best && net != null ? net - best.cost : null;
-  return { opts, best, sale, net, profit, margin: profit != null && best.cost > 0 ? profit / best.cost : null };
+  return { opts, best, sale, net, profit, buyLoc, sellLoc, margin: profit != null && best.cost > 0 ? profit / best.cost : null };
+}
+
+// Travel mode: the cheapest market to buy the materials in, and separately the best market to sell in.
+function evaluateTravel(id, lvl, buyLocs, sellLocs, ok) {
+  let cheap = null, sell = null;
+  for (const b of buyLocs) { const e = evaluate(id, lvl, b, b, ok); if (e.best && (!cheap || e.best.cost < cheap.best.cost)) cheap = e }
+  if (!cheap) return null;
+  for (const s of sellLocs) { const sale = salePrice(priceId(id, lvl), s, ok); if (sale) { const net = sale.v * (1 - feeRate(s)); if (!sell || net > sell.net) sell = { s, sale, net } } }
+  if (!sell) return null;
+  const profit = sell.net - cheap.best.cost;
+  return { ...cheap, sellLoc: sell.s, sale: sell.sale, net: sell.net, profit, margin: cheap.best.cost > 0 ? profit / cheap.best.cost : null };
 }
 
 const verdict = m => m == null ? "" : m >= 0.2 ? '<span class="pill good">Worth crafting</span>' : m > 0 ? '<span class="pill thin">Thin margin</span>' : '<span class="pill loss">Loses silver</span>';
@@ -313,7 +337,7 @@ async function boot() {
     return { id, it, name: nameOf(id), hay: (nameOf(id) + " " + id + " " + it.s).toLowerCase() };
   }).sort((a, b) => a.name.localeCompare(b.name) || a.it.t - b.it.t);
   [...cats].sort((a, b) => a[1].localeCompare(b[1])).forEach(([v, t]) => { $("cat").add(new Option(t, v)); $("f-cat").add(new Option(t, v)) });
-  $("f-cat").value = store.get("f-cat") || "head/leather_helmet";
+  $("f-cat").value = store.get("f-cat") ?? "";
   $("f-cat").onchange = () => store.set("f-cat", $("f-cat").value);
   [...tiers].sort((a, b) => a - b).forEach(t => $("tier").add(new Option("Tier " + t, t)));
   const start = location.hash.slice(1);
@@ -462,7 +486,9 @@ function parseJsonArray(payload) {
 }
 
 // Fetches prices for many ids in as few requests as the URL length allows, and caches them per market.
-async function fetchPrices(ids, locs, onStep) {
+// persist: also cache to localStorage (recipe card). qualities: limit rows, e.g. "1" for materials, to keep big scans small.
+const FETCHED = new Map();
+async function fetchPrices(ids, locs, onStep, { persist = true, qualities = "" } = {}) {
   const chunks = [[]];
   let len = 0;
   for (const id of ids) {
@@ -474,7 +500,14 @@ async function fetchPrices(ids, locs, onStep) {
   for (const [i, c] of chunks.entries()) {
     if (i) await new Promise(r => setTimeout(r, 400));
     if (onStep) onStep(i + 1, chunks.length);
-    const res = await fetch(AODP + c.map(encodeURIComponent).join(",") + ".json?locations=" + locs.map(encodeURIComponent).join(","));
+    const url = AODP + c.map(encodeURIComponent).join(",") + ".json?locations=" + locs.map(encodeURIComponent).join(",") + (qualities ? "&qualities=" + qualities : "");
+    let res;
+    for (let tries = 0; ; tries++) {
+      res = await fetch(url);
+      if (res.status !== 429 || tries === 3) break;
+      if (onStep) onStep(i + 1, chunks.length, true);
+      await new Promise(r => setTimeout(r, 20000));
+    }
     if (res.status === 429) throw new Error("The price server is busy (too many requests). Wait a minute and try again.");
     if (!res.ok) throw new Error("The price server answered " + res.status + ".");
     for (const row of await res.json()) {
@@ -484,7 +517,12 @@ async function fetchPrices(ids, locs, onStep) {
       if (row.quality === 1 && row.buy_price_max > 0) Object.assign(e, { b: row.buy_price_max, bd: row.buy_price_max_date });
     }
   }
-  for (const loc of locs) for (const id of ids) store.set("p:" + loc + "|" + id, best[loc + "|" + id] || null);
+  const now = Date.now();
+  for (const loc of locs) for (const id of ids) {
+    const k = loc + "|" + id, v = best[k] || null;
+    PRICES.set(k, v); FETCHED.set(k, now);
+    if (persist) store.set("p:" + k, v);
+  }
   return best;
 }
 
@@ -527,69 +565,109 @@ async function loadPrices(force) {
   }
 }
 
-// Profit finder: rank every item in one category by profit, using the same math as the recipe card.
+// Profit finder: rank craftable items by profit, using the same math as the recipe card.
 let scan = null;
 function finderItems() {
   const cat = $("f-cat").value, tier = $("f-tier").value, ench = $("f-ench").value;
   const out = [];
   for (const e of DB.list) {
-    if (e.it.c + "/" + e.it.s !== cat) continue;
-    if (tier ? e.it.t !== +tier : e.it.t < 4 || e.it.t > 6) continue;
-    for (const l of Object.keys(e.it.r)) if (ench ? l === ench : +l <= 3) out.push({ id: e.id, l });
+    if (cat && e.it.c + "/" + e.it.s !== cat) continue;
+    if (tier && e.it.t !== +tier) continue;
+    for (const l of Object.keys(e.it.r)) if (!ench || l === ench) out.push({ id: e.id, l });
   }
   return out;
+}
+// Which markets a scan buys and sells in.
+function finderMarkets() {
+  if ($("f-mode").value === "same") return { buy: [matLoc()], sell: [cityEl.value] };
+  const bm = $("f-bm").checked;
+  return { buy: bm ? [...ROYAL, "Caerleon"] : ROYAL, sell: bm ? [...ROYAL, "Caerleon", "Black Market"] : ROYAL };
 }
 async function runScan() {
   const rows = finderItems(), btn = $("f-scan"), n = $("f-note");
   if (!rows.length) { n.textContent = "No craftable items match these filters."; return }
-  if (rows.length > 400) { n.textContent = `That's ${rows.length} items. Pick a single tier or enchantment to keep the scan under 400.`; return }
-  const ids = new Set();
+  const m = finderMarkets(), locs = [...new Set([...m.buy, ...m.sell])];
+  const products = new Set(), mats = new Set();
   for (const { id, l } of rows) {
     const recs = DB.items[id].r[l];
-    ids.add(priceId(id, l));
-    recs.forEach(r => r.m.forEach(m => ids.add(m[0])));
-    if (recs[0].u && l !== "0") { ids.add(priceId(id, String(l - 1))); ids.add(recs[0].u[0]) }
+    products.add(priceId(id, l));
+    recs.forEach(r => r.m.forEach(x => mats.add(x[0])));
+    if (recs[0].u && l !== "0") { mats.add(priceId(id, String(l - 1))); mats.add(recs[0].u[0]) }
   }
+  // Skip what was fetched for these markets in the last 10 minutes, so re-sorting or narrowing a scan costs nothing.
+  const stale = id => locs.some(loc => !(Date.now() - (FETCHED.get(loc + "|" + id) || 0) < 6e5));
+  const needP = [...products].filter(stale), needM = [...mats].filter(id => !products.has(id) && stale(id));
   btn.disabled = true;
-  const city = cityEl.value;
+  const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
   try {
-    await fetchPrices([...ids], [...new Set([city, matLoc()])], (i, t) => n.textContent = `Loading prices… ${i} of ${t}`);
-    scan = { rows, city };
+    // Products at normal and good quality (what a fresh craft is), materials at normal quality only: a fraction of the data.
+    if (needM.length) await fetchPrices(needM, locs, step("material prices"), { persist: false, qualities: "1" });
+    if (needP.length) await fetchPrices(needP, locs, step("item prices"), { persist: false, qualities: "1,2" });
+    scan = { rows, mode: $("f-mode").value, city: cityEl.value, m };
     renderFinder();
-    // Sales volume for the best few, so profit per day can be ranked without hammering the price server.
-    const top = finderResults().filter(r => r.e.profit > 0).slice(0, 25).map(r => priceId(r.id, r.l));
-    if (top.length) { n.textContent = "Loading sales per day for the top items…"; await fetchHistory(top, city).catch(() => {}) }
+    // Check the top of the list against real sales: troll listings and items nobody buys drop out, the next ones move up
+    // and get checked too. A few rounds keeps this to a handful of requests.
+    for (let round = 0; round < 10; round++) {
+      const fresh = r => r.h && Date.now() - r.h.t < 36e5, sort = $("f-sort").value;
+      const pick = k => finderResults(k).filter(r => r.e.profit > 0).slice(0, 40).filter(r => !fresh(r));
+      const unchecked = [...new Map([...pick("profit"), ...(sort === "margin" ? pick("margin") : [])].map(r => [r.id + r.l, r])).values()];
+      if (!unchecked.length) break;
+      const bySell = {};
+      for (const r of unchecked) (bySell[r.e.sellLoc] ??= []).push(priceId(r.id, r.l));
+      n.textContent = "Checking the top items against real sales…";
+      for (const [loc, ids] of Object.entries(bySell)) await fetchHistory(ids, loc).catch(() => {});
+      renderFinder();
+    }
     renderFinder();
   } catch (e) {
     n.textContent = e instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : e.message;
   }
   btn.disabled = false;
 }
-function finderResults() {
+function finderResults(sortKey) {
   if (!scan) return [];
-  const fresh = $("f-fresh").checked;
-  return scan.rows.map(r => {
-    const e = evaluate(r.id, r.l), h = store.get("h:" + scan.city + "|" + priceId(r.id, r.l));
-    return { ...r, e, h, perDay: h && e.profit != null ? e.profit * h.vol * 0.25 : null };
-  }).filter(r => r.e.profit != null && (!fresh || !ageText(r.e.sale.d)?.old))
-    .sort((a, b) => { const k = $("f-sort").value; const v = r => k === "margin" ? r.e.margin : k === "day" ? (r.perDay ?? -Infinity) : r.e.profit; return v(b) - v(a) });
+  const ok = $("f-fresh").checked ? d => !ageText(d)?.old : anyPrice, { m } = scan, out = [];
+  const sane = $("f-sane").checked, minVol = +$("f-vol").value || 0, maxM = (+$("f-max").value || Infinity) / 100;
+  for (const r of scan.rows) {
+    let e = scan.mode === "same" ? evaluate(r.id, r.l, m.buy[0], m.sell[0], ok) : evaluateTravel(r.id, r.l, m.buy, m.sell, ok);
+    if (!e || e.profit == null) continue;
+    const h = store.get("h:" + e.sellLoc + "|" + priceId(r.id, r.l));
+    if (sane && h) {
+      // Nobody bought it in 28 days, or the listing is more than double what it really sells for: skip it.
+      if (h.vol < minVol || !h.vol || (h.avg && e.sale.v > 2 * h.avg)) continue;
+      // Otherwise value the sale at the lower of the listing and the 28-day average sale.
+      if (h.avg && h.avg < e.sale.v) {
+        const net = h.avg * (1 - feeRate(e.sellLoc)), profit = net - e.best.cost;
+        e = { ...e, net, profit, margin: e.best.cost > 0 ? profit / e.best.cost : null, valuedAtAvg: true };
+      }
+    }
+    if (e.margin != null && e.margin > maxM) continue;
+    out.push({ ...r, e, h, perDay: h ? e.profit * h.vol * 0.25 : null });
+  }
+  const k = sortKey || $("f-sort").value, v = r => k === "margin" ? r.e.margin : k === "day" ? (r.perDay ?? -Infinity) : r.e.profit;
+  return out.sort((a, b) => v(b) - v(a) || b.e.profit - a.e.profit);
 }
 function renderFinder() {
   const out = $("f-out"), n = $("f-note");
   if (!scan) { out.innerHTML = ""; return }
-  if (scan.city !== cityEl.value) { out.innerHTML = ""; n.textContent = `The last scan was for ${scan.city}. Press Scan for ${cityEl.value}.`; return }
-  const res = finderResults(), good = res.filter(r => r.e.margin >= 0.2).length;
-  n.textContent = `${res.length} of ${scan.rows.length} items have prices. ${good} make 20% or more. Click a row for the full recipe.`;
-  if (!res.length) { out.innerHTML = '<p class="empty">No item has prices for both the materials and the item. Try another category, or untick "Hide prices older than 24 h".</p>'; return }
-  out.innerHTML = `<table><thead><tr><th>Item</th><th class="num">Real cost</th><th class="num">${isBM() ? "BM pays" : "Sells for"}</th><th class="num">Profit</th><th class="num">% on cost</th><th class="num">Sold / day</th><th class="num">Profit / day*</th><th>Price age</th></tr></thead><tbody>
-    ${res.slice(0, 150).map(r => { const a = ageText(r.e.sale.d), pid = priceId(r.id, r.l); return `<tr data-open="${r.id}" data-l="${r.l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(nameOf(r.id))}${r.l !== "0" ? " ." + r.l : ""}${r.e.best.upgrade ? '<span class="age">enchant the .' + (r.l - 1) + "</span>" : r.e.opts.length > 1 ? '<span class="age">' + esc(r.e.best.label) + "</span>" : ""}</div></div></td>
-      <td class="num">${fmt(r.e.best.cost)}</td><td class="num">${fmt(r.e.sale.v)}</td><td class="num">${signed(r.e.profit)}</td><td class="num">${pct(r.e.margin)} ${r.e.margin >= 0.2 ? "✓" : ""}</td>
+  if (scan.mode === "same" && scan.city !== cityEl.value) { out.innerHTML = ""; n.textContent = `The last scan was for ${scan.city}. Press Scan for ${cityEl.value}.`; return }
+  const res = finderResults(), good = res.filter(r => r.e.margin >= 0.2).length, travel = scan.mode === "travel";
+  n.textContent = `${res.length.toLocaleString("en-US")} of ${scan.rows.length.toLocaleString("en-US")} items have prices. ${good.toLocaleString("en-US")} make 20% or more.${res.length > 200 ? " Showing the top 200." : ""} Click a row for the full recipe.`;
+  if (!res.length) { out.innerHTML = '<p class="empty">No item has prices for both the materials and the item. Try other filters, or untick "Ignore prices older than 24 h".</p>'; return }
+  out.innerHTML = `<table><thead><tr><th>Item</th>${travel ? "<th>Buy → sell</th>" : ""}<th class="num">Real cost</th><th class="num">${!travel && isBM() ? "BM pays" : "Sells for"}</th><th class="num">Profit</th><th class="num">% on cost</th><th class="num">Sold / day</th><th class="num">Profit / day*</th><th>Price age</th></tr></thead><tbody>
+    ${res.slice(0, 200).map(r => { const a = ageText(r.e.sale.d), pid = priceId(r.id, r.l); return `<tr data-open="${r.id}" data-l="${r.l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(nameOf(r.id))}${r.l !== "0" ? " ." + r.l : ""}${r.e.best.upgrade ? '<span class="age">enchant the .' + (r.l - 1) + "</span>" : r.e.opts.length > 1 ? '<span class="age">' + esc(r.e.best.label) + "</span>" : ""}</div></div></td>
+      ${travel ? `<td>${r.e.buyLoc === r.e.sellLoc ? esc(r.e.buyLoc) + '<span class="age">all in one city</span>' : esc(r.e.buyLoc) + " → " + esc(r.e.sellLoc)}</td>` : ""}
+      <td class="num">${fmt(r.e.best.cost)}</td><td class="num">${r.e.valuedAtAvg ? fmt(r.e.net / (1 - feeRate(r.e.sellLoc))) + '<span class="age">28-day average</span>' : fmt(r.e.sale.v)}</td><td class="num">${signed(r.e.profit)}</td><td class="num">${pct(r.e.margin)} ${r.e.margin >= 0.2 ? "✓" : ""}</td>
       <td class="num">${r.h ? fmt(r.h.vol) : "—"}</td><td class="num">${r.perDay != null ? signed(r.perDay) : "—"}</td><td><span class="${a && a.old ? "old" : ""}">${a ? a.text : "—"}</span></td></tr>` }).join("")}
-    </tbody></table><p class="note" style="padding:0 12px 12px">* Profit per day assumes you craft 25% of daily sales. Sales per day are loaded for the 25 most profitable items. Check the price chart in game before a big batch: a price far above the usual can be a troll listing.</p>`;
+    </tbody></table><p class="note" style="padding:0 12px 12px">* Profit per day assumes you craft 25% of daily sales. With the real-sales check on, the top items are checked against 28 days of sales in the city they sell in: items nobody bought and listings over double the usual price are dropped, and a listing above the average is counted at the average.${travel ? " Travel routes don't count the transport: carry heavy loads on an ox through blue and yellow zones, or pay the travel planner." : ""} Check the price chart in game before a big batch: a price far above the usual can be a troll listing.</p>`;
   out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
 }
 $("f-scan").onclick = runScan;
-["f-sort", "f-fresh"].forEach(id => $(id).addEventListener("change", renderFinder));
+$("f-mode").value = store.get("f-mode") || "same";
+const syncMode = () => { $("f-bm-wrap").hidden = $("f-mode").value === "same"; store.set("f-mode", $("f-mode").value) };
+$("f-mode").addEventListener("change", syncMode); syncMode();
+["f-sort", "f-fresh", "f-sane"].forEach(id => $(id).addEventListener("change", renderFinder));
+["f-max", "f-vol"].forEach(id => $(id).addEventListener("input", renderFinder));
 
 $("s-rr").value = S.rr; $("s-prem").checked = !!S.premium; $("s-fee").value = S.fee || "";
 function saveSettings() {
