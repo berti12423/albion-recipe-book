@@ -132,6 +132,28 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 .next { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-radius: 10px; padding: 14px 18px }
 .next .primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500 }
 .reset { align-self: flex-start; font-size: .85rem; color: var(--muted) }
+:root { --good: #2f7a3a } @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --good: #6cc165 } } :root[data-theme="dark"] { --good: #6cc165 }
+.settings { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; max-width: 1180px; margin: -6px auto 16px; font-size: .9rem; color: var(--muted) }
+.settings label { display: flex; gap: 6px; align-items: center }
+.settings input[type=number] { width: 7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-family: var(--mono) }
+.settings input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px }
+.profit { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg) }
+.profit h3 { font: 500 .78rem var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px }
+.profit .big { font: 500 1.35rem var(--mono) }
+.profit ul { margin: 8px 0 0; padding-left: 18px; font-size: .92rem }
+.profit tr.best td { font-weight: 700 }
+.pill { display: inline-block; font: 500 .75rem var(--body); letter-spacing: .03em; border-radius: 999px; padding: 1px 9px; border: 1px solid currentColor; vertical-align: 2px; white-space: nowrap }
+.pill.good { color: var(--good) } .pill.thin { color: var(--accent) } .pill.loss { color: var(--warn) }
+.pos { color: var(--good) } .neg { color: var(--warn) }
+.finder { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px }
+.finder .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.finder .controls select { max-width: 100% }
+.finder .controls .primary, .profit .primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500 }
+.finder .card { padding: 0 }
+.finder table tr[data-open] { cursor: pointer }
+.finder table tr[data-open]:hover { background: var(--accent-soft) }
+.finder td .mat { gap: 8px }
+.finder label.chk { display: flex; gap: 6px; align-items: center; font-size: .9rem; color: var(--muted) }
 </style>
 </head>
 <body>
@@ -150,9 +172,36 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 
 <nav class="tabs" role="tablist" aria-label="Sections">
   <button role="tab" id="tab-recipes" data-view="recipes" aria-selected="true">Recipes</button>
+  <button role="tab" id="tab-finder" data-view="finder" aria-selected="false">Profit finder</button>
   <button role="tab" id="tab-crafting" data-view="crafting" aria-selected="false">Crafting path<span class="pct" id="pct-crafting"></span></button>
   <button role="tab" id="tab-island" data-view="island" aria-selected="false">Island path<span class="pct" id="pct-island"></span></button>
 </nav>
+
+<div class="settings" id="settings">
+  <label>Return rate
+    <select id="s-rr">
+      <option value="15.2">Royal city 15.2%</option><option value="24.8">Bonus city 24.8%</option>
+      <option value="43.5">City + focus 43.5%</option><option value="47.9">Bonus city + focus 47.9%</option>
+      <option value="53">Good hideout 53%</option><option value="0">Island 0%</option>
+    </select></label>
+  <label><input type="checkbox" id="s-prem"> Premium (4% tax instead of 8%)</label>
+  <label>Station fee per craft <input id="s-fee" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></label>
+</div>
+
+<section id="view-finder" class="finder" hidden>
+  <div class="path-head"><div><h2>Profit finder</h2>
+    <p>Scans every item in a category and ranks them by profit after your return rate, tax and fees. Materials are bought and the item is sold in the city you picked at the top. For the Black Market, materials are priced in Caerleon.</p></div></div>
+  <div class="controls">
+    <select id="f-cat" aria-label="Category"></select>
+    <select id="f-tier" aria-label="Tier"><option value="">Tiers 4–6</option><option value="4">Tier 4</option><option value="5">Tier 5</option><option value="6">Tier 6</option><option value="7">Tier 7</option><option value="8">Tier 8</option></select>
+    <select id="f-ench" aria-label="Enchantment"><option value="">Enchant .0–.3</option><option value="0">.0 only</option><option value="1">.1 only</option><option value="2">.2 only</option><option value="3">.3 only</option></select>
+    <select id="f-sort" aria-label="Sort by"><option value="profit">Sort by profit per item</option><option value="margin">Sort by % on cost</option><option value="day">Sort by profit per day</option></select>
+    <label class="chk"><input type="checkbox" id="f-fresh" checked> Hide prices older than 24 h</label>
+    <button class="primary" id="f-scan">Scan prices</button>
+  </div>
+  <p class="note" id="f-note">Pick a category and press Scan. A scan asks the price server for every item and material, so big categories take a few seconds.</p>
+  <div class="card"><div class="tablewrap" id="f-out"></div></div>
+</section>
 
 <section id="view-crafting" class="path" hidden></section>
 <section id="view-island" class="path" hidden></section>
@@ -198,8 +247,60 @@ function ageText(iso) {
   return { text: h < 1 ? Math.max(1, Math.round(ms / 6e4)) + " min ago" : h < 48 ? Math.round(h) + " h ago" : Math.round(h / 24) + " days ago", old: h > 24 };
 }
 
-function priceKey(id) { return cityEl.value + "|" + id }
-function getPrice(id) { return store.get("p:" + priceKey(id)) }
+// Prices are cached per market: "p:<location>|<id>" = { s: cheapest sell order, d, q, b: black market normal-quality buy order, bd }.
+const AODP_HISTORY = "https://europe.albion-online-data.com/api/v2/stats/history/";
+const getPrice = (loc, id) => store.get("p:" + loc + "|" + id);
+const isBM = () => cityEl.value === "Black Market";
+const matLoc = () => isBM() ? "Caerleon" : cityEl.value;
+
+// Profit settings, shared by the recipe card and the profit finder.
+const S = Object.assign({ rr: "15.2", premium: false, fee: 0 }, store.get("settings") || {});
+// Market tax (4% premium, 8% without) plus the 2.5% listing fee; selling straight into a black market buy order has no listing fee.
+const feeRate = () => (S.premium ? 0.04 : 0.08) + (isBM() ? 0 : 0.025);
+
+function salePrice(pid) {
+  const p = getPrice(cityEl.value, pid);
+  if (!p) return null;
+  if (isBM()) return p.b ? { v: p.b, d: p.bd } : null;
+  return p.s ? { v: p.s, d: p.d, q: p.q } : null;
+}
+
+// Every way to get one item of this tier and enchantment: each recipe, plus buying the enchantment below and enchanting it.
+function craftOptions(id, lvl) {
+  const recs = DB.items[id].r[lvl], rr = +S.rr / 100, ml = matLoc();
+  const opts = recs.map((r, i) => {
+    let back = 0, gone = 0;
+    for (const [mid, cnt, art] of r.m) {
+      const p = getPrice(ml, mid);
+      if (!p || !p.s) return { label: recipeLabel(recs, i), cost: null };
+      if (art) gone += p.s * cnt; else back += p.s * cnt;
+    }
+    return { label: recipeLabel(recs, i), cost: (back * (1 - rr) + gone + (+S.fee || 0)) / r.n };
+  });
+  const u = recs[0].u;
+  if (u && lvl !== "0") {
+    const prev = getPrice(ml, priceId(id, String(lvl - 1))), rune = getPrice(ml, u[0]);
+    opts.push({ label: `Buy the .${lvl - 1} and enchant it (${u[1]} ${nameOf(u[0])})`, cost: prev && prev.s && rune && rune.s ? prev.s + rune.s * u[1] : null, upgrade: true });
+  }
+  return opts;
+}
+function recipeLabel(recs, i) {
+  if (recs.length === 1) return "Craft it";
+  const art = recs[i].m.find(m => m[2]);
+  return "Craft with " + (art ? nameOf(art[0]) : "recipe " + (i + 1));
+}
+
+function evaluate(id, lvl) {
+  const opts = craftOptions(id, lvl), sale = salePrice(priceId(id, lvl));
+  const best = opts.filter(o => o.cost != null).reduce((a, b) => !a || b.cost < a.cost ? b : a, null);
+  const net = sale ? sale.v * (1 - feeRate()) : null;
+  const profit = best && net != null ? net - best.cost : null;
+  return { opts, best, sale, net, profit, margin: profit != null && best.cost > 0 ? profit / best.cost : null };
+}
+
+const verdict = m => m == null ? "" : m >= 0.2 ? '<span class="pill good">Worth crafting</span>' : m > 0 ? '<span class="pill thin">Thin margin</span>' : '<span class="pill loss">Loses silver</span>';
+const pct = m => m == null ? "—" : Math.round(m * 100) + "%";
+const signed = n => n == null ? "—" : `<span class="${n >= 0 ? "pos" : "neg"}">${n >= 0 ? "+" : "−"}${fmt(Math.abs(n))}</span>`;
 
 async function boot() {
   const res = await fetch("recipes.json");
@@ -211,7 +312,9 @@ async function boot() {
     if (it.t) tiers.add(it.t);
     return { id, it, name: nameOf(id), hay: (nameOf(id) + " " + id + " " + it.s).toLowerCase() };
   }).sort((a, b) => a.name.localeCompare(b.name) || a.it.t - b.it.t);
-  [...cats].sort((a, b) => a[1].localeCompare(b[1])).forEach(([v, t]) => $("cat").add(new Option(t, v)));
+  [...cats].sort((a, b) => a[1].localeCompare(b[1])).forEach(([v, t]) => { $("cat").add(new Option(t, v)); $("f-cat").add(new Option(t, v)) });
+  $("f-cat").value = store.get("f-cat") || "head/leather_helmet";
+  $("f-cat").onchange = () => store.set("f-cat", $("f-cat").value);
   [...tiers].sort((a, b) => a - b).forEach(t => $("tier").add(new Option("Tier " + t, t)));
   const start = location.hash.slice(1);
   renderList();
@@ -248,15 +351,36 @@ function open(id, scroll) {
 }
 
 function cell(id, count, isArt) {
-  const p = getPrice(id), a = p && ageText(p.d);
-  return { id, count, isArt, price: p ? p.s : null, age: a, q: p && p.q > 1 ? QUALITY[p.q] : null };
+  const p = getPrice(matLoc(), id), a = p && p.s && ageText(p.d);
+  return { id, count, isArt, price: p && p.s ? p.s : null, age: a, q: p && p.q > 1 ? QUALITY[p.q] : null };
+}
+
+function profitHtml() {
+  const pid = priceId(current, level), e = evaluate(current, level), sale = e.sale;
+  const age = sale && ageText(sale.d), h = store.get("h:" + cityEl.value + "|" + pid);
+  const where = isBM() ? "the Black Market buys a normal-quality one for" : `the cheapest sell order in ${esc(cityEl.value)} is`;
+  let html = `<section class="profit" aria-label="Profit"><h3>Profit per item</h3>`;
+  if (!sale) html += `<p>No price yet: nobody is ${isBM() ? "buying this on the Black Market" : "selling this in " + esc(cityEl.value)} right now, or prices are still loading. No listings can also mean nobody buys it.</p>`;
+  else html += `<p>${verdict(e.margin)} <span class="big">${signed(e.profit)}</span> per item${e.margin != null ? `, <b>${pct(e.margin)}</b> on cost` : ""}</p>
+    <p class="note">Right now ${where} <b class="mono">${fmt(sale.v)}</b>${sale.q > 1 ? ` (${QUALITY[sale.q]})` : ""}${age ? ` <span class="${age.old ? "old" : ""}">${age.text}</span>` : ""}. After ${S.premium ? "4%" : "8%"} tax${isBM() ? "" : " and the 2.5% listing fee"} you keep <b class="mono">${fmt(e.net)}</b>.</p>`;
+  html += `<div class="tablewrap"><table><thead><tr><th>How you get it</th><th class="num">Real cost</th><th class="num">Profit</th></tr></thead><tbody>
+    ${e.opts.map(o => `<tr${o === e.best && e.opts.length > 1 ? ' class="best"' : ""}><td>${esc(o.label)}${o === e.best && e.opts.length > 1 ? ' <span class="pill good">cheapest</span>' : ""}</td><td class="num">${fmt(o.cost)}</td><td class="num">${o.cost != null && e.net != null ? signed(e.net - o.cost) : "—"}</td></tr>`).join("")}
+    </tbody></table></div><ul>`;
+  html += `<li>Real cost = materials × ${Math.round((100 - S.rr) * 10) / 10}% (your ${S.rr}% return rate) + artifacts, tomes and sigils at full price, because those never come back${+S.fee ? ` + ${fmt(+S.fee)} station fee` : ""}.</li>`;
+  if (h) html += h.vol ? `<li>About <b class="mono">${fmt(h.vol)}</b> sell per day in ${esc(cityEl.value)} (28-day average, all qualities). Craft <b class="mono">${fmt(Math.max(1, h.vol * 0.2))}–${fmt(Math.max(1, h.vol * 0.3))}</b> at a time (20–30% of daily sales) so they sell in a day or two.</li>`
+    : `<li class="old">No recorded sales in ${esc(cityEl.value)} over the last 28 days. Craft one or two to test before making a batch.</li>`;
+  if (!e.best) html += `<li class="old">Some material prices are missing in ${esc(matLoc())}, so the cost can't be worked out. Nobody may be selling them there right now.</li>`;
+  if (!isBM() && h && h.avg && sale && sale.v > 2 * h.avg) html += `<li class="old">The price is more than double the 28-day average (${fmt(h.avg)}). It may be a troll listing; don't count on it.</li>`;
+  if (age && age.old) html += `<li class="old">This price is over a day old. Check it in game before you buy materials.</li>`;
+  if (e.margin != null && e.margin > 0 && e.margin < 0.2) html += `<li>Under 20% leaves little room if you have to relist (another 2.5% each time).</li>`;
+  html += `<li>Check the profit at the lowest quality; anything better is a bonus. Journals, salads and spec aren't counted.</li></ul></section>`;
+  return html;
 }
 
 function renderCard() {
   const it = DB.items[current], recs = it.r[level];
   const card = $("card");
   const lv = Object.keys(it.r);
-  const own = cell(priceId(current, level));
   let html = `<div class="title">${icon(priceId(current, level), 72)}<div><h2></h2><div class="meta">Tier ${it.t || "–"} · ${pretty(it.c)} · ${pretty(it.s)}</div></div></div>`;
   if (lv.length > 1) html += `<div class="ench" role="group" aria-label="Enchantment">${lv.map(l => `<button class="l${l}" data-l="${l}" aria-pressed="${l === level}">${it.t ? it.t + "." + l : "." + l}</button>`).join("")}</div>`;
   html += unlockHtml(current, it);
@@ -271,9 +395,9 @@ function renderCard() {
       <tr class="total"><td colspan="3">Materials at full price${r.n > 1 ? ` (÷ ${r.n} = ${total ? fmt(total / r.n) : "—"} each)` : ""}</td><td class="num">${fmt(total)}</td></tr>
       </tbody></table></div></div>`;
   });
+  html += profitHtml();
   html += `<div class="prices"><button class="primary" id="load">Refresh prices</button>
-    <span>Sells for <b style="font-family:var(--mono)">${fmt(own.price)}</b>${own.q ? ` (${own.q})` : ""}${own.age ? ` <span class="age ${own.age.old ? "old" : ""}" style="display:inline">${own.age.text}</span>` : ""}</span>
-    <p class="note" id="note">Prices are the cheapest sell order in ${esc(cityEl.value)} at any quality. Live from the Albion Online Data Project, refreshed when you open an item (at most every 10 minutes).</p></div>`;
+    <p class="note" id="note">Material prices are the cheapest sell order in ${esc(matLoc())} at any quality. Live from the Albion Online Data Project, refreshed when you open an item (at most every 10 minutes).</p></div>`;
   card.innerHTML = html;
   card.querySelector("h2").textContent = nameOf(current) + (level !== "0" ? " ." + level : "");
   card.querySelectorAll(".ench button").forEach(b => b.onclick = () => { level = b.dataset.l; renderCard() });
@@ -337,33 +461,65 @@ function parseJsonArray(payload) {
   return JSON.parse(text.slice(a, b + 1));
 }
 
+// Fetches prices for many ids in as few requests as the URL length allows, and caches them per market.
+async function fetchPrices(ids, locs, onStep) {
+  const chunks = [[]];
+  let len = 0;
+  for (const id of ids) {
+    const l = encodeURIComponent(id).length + 1;
+    if (len + l > 3000 && chunks.at(-1).length) { chunks.push([]); len = 0 }
+    chunks.at(-1).push(id); len += l;
+  }
+  const best = {};
+  for (const [i, c] of chunks.entries()) {
+    if (i) await new Promise(r => setTimeout(r, 400));
+    if (onStep) onStep(i + 1, chunks.length);
+    const res = await fetch(AODP + c.map(encodeURIComponent).join(",") + ".json?locations=" + locs.map(encodeURIComponent).join(","));
+    if (res.status === 429) throw new Error("The price server is busy (too many requests). Wait a minute and try again.");
+    if (!res.ok) throw new Error("The price server answered " + res.status + ".");
+    for (const row of await res.json()) {
+      const e = best[row.city + "|" + row.item_id] ??= { s: null, d: null, q: null, b: null, bd: null };
+      if (row.sell_price_min > 0 && (e.s == null || row.sell_price_min < e.s)) Object.assign(e, { s: row.sell_price_min, d: row.sell_price_min_date, q: row.quality });
+      // The black market takes any quality at or above the order's, so its normal-quality buy order is what a fresh craft can sell to.
+      if (row.quality === 1 && row.buy_price_max > 0) Object.assign(e, { b: row.buy_price_max, bd: row.buy_price_max_date });
+    }
+  }
+  for (const loc of locs) for (const id of ids) store.set("p:" + loc + "|" + id, best[loc + "|" + id] || null);
+  return best;
+}
+
+// Daily sales over the last 28 days, summed across qualities, plus the average price for spotting troll listings.
+async function fetchHistory(ids, loc) {
+  const res = await fetch(AODP_HISTORY + ids.map(encodeURIComponent).join(",") + ".json?locations=" + encodeURIComponent(loc) + "&time-scale=24");
+  if (!res.ok) return;
+  const since = Date.now() - 28 * 864e5, acc = {};
+  for (const r of await res.json()) {
+    const a = acc[r.item_id] ??= { n: 0, sum: 0 };
+    for (const d of r.data) if (new Date(d.timestamp + "Z").getTime() >= since) { a.n += d.item_count; a.sum += d.item_count * d.avg_price }
+  }
+  for (const id of ids) { const a = acc[id]; store.set("h:" + loc + "|" + id, { vol: a ? a.n / 28 : 0, avg: a && a.n ? a.sum / a.n : null, t: Date.now() }) }
+}
+
 let loading = 0;
 async function loadPrices(force) {
-  const recs = DB.items[current].r[level];
-  const ids = [...new Set([priceId(current, level), ...recs.flatMap(r => r.m.map(m => m[0]))])];
-  const city = cityEl.value, key = city + "|" + current + "|" + level;
+  const recs = DB.items[current].r[level], pid = priceId(current, level);
+  const ids = [...new Set([pid, ...recs.flatMap(r => r.m.map(m => m[0]))])];
+  if (recs[0].u && level !== "0") ids.push(priceId(current, String(level - 1)), recs[0].u[0]);
+  const city = cityEl.value, locs = [...new Set([city, matLoc()])], key = city + "|" + current + "|" + level;
   const fetched = store.get("f:" + key);
   if (!force && fetched && Date.now() - fetched < 10 * 60 * 1000) return;
   const mine = ++loading;
   const btn = $("load"); if (btn) btn.disabled = true;
-  note("Loading " + city + " prices…");
-  const url = AODP + ids.map(encodeURIComponent).join(",") + ".json?locations=" + encodeURIComponent(city);
+  note("Loading " + locs.join(" and ") + " prices…");
   try {
-    const res = await fetch(url);
-    if (res.status === 429) throw new Error("The price server is busy (too many requests). Wait a minute and refresh.");
-    if (!res.ok) throw new Error("The price server answered " + res.status + ".");
-    const rows = await res.json();
-    const best = {};
-    for (const row of rows) {
-      if (row.sell_price_min > 0 && (!best[row.item_id] || row.sell_price_min < best[row.item_id].s))
-        best[row.item_id] = { s: row.sell_price_min, d: row.sell_price_min_date, q: row.quality };
-    }
-    for (const id of ids) store.set("p:" + city + "|" + id, best[id] || null);
+    const best = await fetchPrices([...new Set(ids)], locs);
+    const h = store.get("h:" + city + "|" + pid);
+    if (force || !h || Date.now() - h.t > 60 * 60 * 1000) await fetchHistory([pid], city).catch(() => {});
     store.set("f:" + key, Date.now());
     if (mine !== loading) return;
     renderCard();
-    const got = Object.keys(best).length;
-    note(got ? `${got} of ${ids.length} prices found. A dash means nobody in ${city} is selling it right now.` : `No sell orders found in ${city} for these items.`, !got);
+    const got = Object.values(best).filter(e => e.s || e.b).length;
+    note(got ? `Prices updated. A dash means nobody in ${matLoc()} is selling it right now.` : `No orders found in ${locs.join(" or ")} for these items.`, !got);
   } catch (e) {
     if (mine !== loading) return;
     note(e instanceof TypeError ? "Couldn't reach the price server. Check your connection and refresh." : e.message, true);
@@ -371,15 +527,89 @@ async function loadPrices(force) {
   }
 }
 
+// Profit finder: rank every item in one category by profit, using the same math as the recipe card.
+let scan = null;
+function finderItems() {
+  const cat = $("f-cat").value, tier = $("f-tier").value, ench = $("f-ench").value;
+  const out = [];
+  for (const e of DB.list) {
+    if (e.it.c + "/" + e.it.s !== cat) continue;
+    if (tier ? e.it.t !== +tier : e.it.t < 4 || e.it.t > 6) continue;
+    for (const l of Object.keys(e.it.r)) if (ench ? l === ench : +l <= 3) out.push({ id: e.id, l });
+  }
+  return out;
+}
+async function runScan() {
+  const rows = finderItems(), btn = $("f-scan"), n = $("f-note");
+  if (!rows.length) { n.textContent = "No craftable items match these filters."; return }
+  if (rows.length > 400) { n.textContent = `That's ${rows.length} items. Pick a single tier or enchantment to keep the scan under 400.`; return }
+  const ids = new Set();
+  for (const { id, l } of rows) {
+    const recs = DB.items[id].r[l];
+    ids.add(priceId(id, l));
+    recs.forEach(r => r.m.forEach(m => ids.add(m[0])));
+    if (recs[0].u && l !== "0") { ids.add(priceId(id, String(l - 1))); ids.add(recs[0].u[0]) }
+  }
+  btn.disabled = true;
+  const city = cityEl.value;
+  try {
+    await fetchPrices([...ids], [...new Set([city, matLoc()])], (i, t) => n.textContent = `Loading prices… ${i} of ${t}`);
+    scan = { rows, city };
+    renderFinder();
+    // Sales volume for the best few, so profit per day can be ranked without hammering the price server.
+    const top = finderResults().filter(r => r.e.profit > 0).slice(0, 25).map(r => priceId(r.id, r.l));
+    if (top.length) { n.textContent = "Loading sales per day for the top items…"; await fetchHistory(top, city).catch(() => {}) }
+    renderFinder();
+  } catch (e) {
+    n.textContent = e instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : e.message;
+  }
+  btn.disabled = false;
+}
+function finderResults() {
+  if (!scan) return [];
+  const fresh = $("f-fresh").checked;
+  return scan.rows.map(r => {
+    const e = evaluate(r.id, r.l), h = store.get("h:" + scan.city + "|" + priceId(r.id, r.l));
+    return { ...r, e, h, perDay: h && e.profit != null ? e.profit * h.vol * 0.25 : null };
+  }).filter(r => r.e.profit != null && (!fresh || !ageText(r.e.sale.d)?.old))
+    .sort((a, b) => { const k = $("f-sort").value; const v = r => k === "margin" ? r.e.margin : k === "day" ? (r.perDay ?? -Infinity) : r.e.profit; return v(b) - v(a) });
+}
+function renderFinder() {
+  const out = $("f-out"), n = $("f-note");
+  if (!scan) { out.innerHTML = ""; return }
+  if (scan.city !== cityEl.value) { out.innerHTML = ""; n.textContent = `The last scan was for ${scan.city}. Press Scan for ${cityEl.value}.`; return }
+  const res = finderResults(), good = res.filter(r => r.e.margin >= 0.2).length;
+  n.textContent = `${res.length} of ${scan.rows.length} items have prices. ${good} make 20% or more. Click a row for the full recipe.`;
+  if (!res.length) { out.innerHTML = '<p class="empty">No item has prices for both the materials and the item. Try another category, or untick "Hide prices older than 24 h".</p>'; return }
+  out.innerHTML = `<table><thead><tr><th>Item</th><th class="num">Real cost</th><th class="num">${isBM() ? "BM pays" : "Sells for"}</th><th class="num">Profit</th><th class="num">% on cost</th><th class="num">Sold / day</th><th class="num">Profit / day*</th><th>Price age</th></tr></thead><tbody>
+    ${res.slice(0, 150).map(r => { const a = ageText(r.e.sale.d), pid = priceId(r.id, r.l); return `<tr data-open="${r.id}" data-l="${r.l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(nameOf(r.id))}${r.l !== "0" ? " ." + r.l : ""}${r.e.best.upgrade ? '<span class="age">enchant the .' + (r.l - 1) + "</span>" : r.e.opts.length > 1 ? '<span class="age">' + esc(r.e.best.label) + "</span>" : ""}</div></div></td>
+      <td class="num">${fmt(r.e.best.cost)}</td><td class="num">${fmt(r.e.sale.v)}</td><td class="num">${signed(r.e.profit)}</td><td class="num">${pct(r.e.margin)} ${r.e.margin >= 0.2 ? "✓" : ""}</td>
+      <td class="num">${r.h ? fmt(r.h.vol) : "—"}</td><td class="num">${r.perDay != null ? signed(r.perDay) : "—"}</td><td><span class="${a && a.old ? "old" : ""}">${a ? a.text : "—"}</span></td></tr>` }).join("")}
+    </tbody></table><p class="note" style="padding:0 12px 12px">* Profit per day assumes you craft 25% of daily sales. Sales per day are loaded for the 25 most profitable items. Check the price chart in game before a big batch: a price far above the usual can be a troll listing.</p>`;
+  out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
+}
+$("f-scan").onclick = runScan;
+["f-sort", "f-fresh"].forEach(id => $(id).addEventListener("change", renderFinder));
+
+$("s-rr").value = S.rr; $("s-prem").checked = !!S.premium; $("s-fee").value = S.fee || "";
+function saveSettings() {
+  S.rr = $("s-rr").value; S.premium = $("s-prem").checked; S.fee = Math.max(0, +$("s-fee").value || 0);
+  store.set("settings", S);
+  if (DB && current) renderCard();
+  renderFinder();
+}
+["s-rr", "s-prem"].forEach(id => $(id).addEventListener("change", saveSettings));
+$("s-fee").addEventListener("input", saveSettings);
+
 $("q").addEventListener("input", renderList);
 $("cat").addEventListener("change", renderList);
 $("tier").addEventListener("change", renderList);
-cityEl.addEventListener("change", () => { store.set("city", cityEl.value); if (DB) renderCard() });
+cityEl.addEventListener("change", () => { store.set("city", cityEl.value); if (DB) renderCard(); renderFinder() });
 const ISLAND_COST = 6457500;
 const PATHS = {
   crafting: {
     title: "Crafting path",
-    intro: "From an empty Destiny Board to steady crafting profit. Based on the Nendys crafting masterclass; numbers were current when it was recorded.",
+    intro: "From an empty Destiny Board to steady crafting profit. Based on the Nendys crafting videos; numbers were current when they were recorded.",
     next: { text: "Saved enough silver for an island?", to: "island", label: "Go to the island path" },
     stages: [
       { title: "Get set up", why: "Crafting is the last of three steps: gathering, refining, crafting. You can skip the first two and buy everything refined on the market.", steps: [
@@ -406,6 +636,15 @@ const PATHS = {
         { id: "c-local", title: "Buy, craft and sell in the same city", detail: "If it's profitable in Fort Sterling, buy the materials in Fort Sterling, craft there and sell there. Hauling to a bonus city for a few percent turns crafting into a job." },
         { id: "c-sell", title: "List with sell orders and stay patient", detail: "Every re-list costs another 2.5%. Only change your price if you're completely buried and won't sell any time soon. Use <b>buy orders</b> to get materials cheaper if you can wait." },
         { id: "c-first", title: "Sell your first profitable batch", detail: "Write down what worked so you can repeat it.", field: { label: "Item that made money", placeholder: "e.g. 4.0 Hellion Hood" } }
+      ]},
+      { title: "Find profit like Nendys", why: "The habits from about 250 Nendys videos and shorts. The Profit finder tab and the profit box on every recipe do the math for you.", steps: [
+        { id: "n-finder", title: "Scan a category in the Profit finder", detail: "Set your return rate and premium at the top, pick a category and tier, then press <b>Scan prices</b>. Aim for <b>20–30% on cost</b> or more; that leaves room for a relist. Check items you've made money on before first: if they were profitable once, they often still are." },
+        { id: "n-demand", title: "Look where the demand is", detail: "<ul><li><b>Armory (X)</b>: gear that shows up in many open-world solo builds always sells (Battle Axe 4.2, Fiend Cowl).</li><li><b>Inspect players (Y)</b> and look at what they wear.</li><li><b>Odd prices</b> mean too few crafters: a 4.0 for 27k, or sandals costing more than robes even though sandals need half the cloth.</li><li>If one tier is profitable, check the other tiers, enchantments and cities too.</li></ul>" },
+        { id: "n-cheaper", title: "Always check the cheaper way to make it", detail: "Artifact items have a second recipe with a <b>crystallized</b> artifact (e.g. Crystallized Dread instead of an Infernal Cloth Visor), often at half the price. Enchanted items can be bought one enchantment lower and upgraded with 96 runes, souls or relics per step. For potions, break a tier 5 artifact into two tier 3s when that's cheaper. The recipe card compares all of these." },
+        { id: "n-sure", title: "Start with the dependable earners", detail: "No spec needed for most: <b>royal items</b> (keep the base item's quality, so upgrade a cheap 4.0 to excellent), <b>faction capes</b> (1,000+ sold a day per city), <b>artifact potions</b> (tornado, calming, cleansing, hellfire), <b>gathering gear</b> for the city's biome, fishing rods and tools, and meta hoods like Stalker and Hellion.", link: { item: "T4_HEAD_LEATHER_MORGANA", text: "Open the Stalker Hood recipe" } },
+        { id: "n-extras", title: "Add the free extras", detail: "<b>Journals</b> fill while you craft and usually sell for about double; they often pay all your fees (skip them when empty and full cost the same). A <b>salad</b> raises quality; eat another every 2 minutes. Use the <b>cheapest station</b>: press N, right-click the station type and compare; the far ones are usually cheaper." },
+        { id: "n-sell", title: "Sell the smart way", detail: "List a <b>sell order at 1 silver under</b> the cheapest one instead of selling instantly. Keep <b>2.5% of your stock's value</b> in cash for listing fees. Don't sell in the city with the crafting bonus for that item, since everyone crafts there. Patience pays: items sitting for a few days at 20%+ beat silver doing nothing." },
+        { id: "n-avoid", title: "Know what to skip", detail: "Never craft on your island (0% return rate; the only exception is a Mill for butter). Tier 2–3 items, garbs and robes rarely pay. Don't count on Excellent or Masterpiece rolls to make a profit. Black market runs to Caerleon pay well (it prefers non-artifact, low-tier, low-enchant, low-quality items) but one gank can wipe you out, so wait until you can afford to lose a load." }
       ]},
       { title: "Grow", why: "Crafting is a means to an end: silver for the things you actually want.", steps: [
         { id: "c-spec", title: "Know mastery vs specialization", detail: "<b>Mastery</b> unlocks higher tiers. <b>Specialization</b> raises quality and lowers focus cost, so it only matters for items you craft with focus." },
@@ -513,11 +752,12 @@ function goalOut() {
 
 function show(v) {
   view = v;
-  for (const k of ["recipes", "crafting", "island"]) {
+  for (const k of ["recipes", "finder", "crafting", "island"]) {
     $("view-" + k).hidden = k !== v;
     $("tab-" + k).setAttribute("aria-selected", k === v);
   }
-  if (v !== "recipes") renderPath(v);
+  $("settings").hidden = !(v === "recipes" || v === "finder");
+  if (PATHS[v]) renderPath(v);
   const hash = v === "recipes" ? current : v;
   if (hash) try { history.replaceState(null, "", "#" + hash) } catch {}
   store.set("view", v);
@@ -525,7 +765,7 @@ function show(v) {
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => show(b.dataset.view));
 {
   const h = location.hash.slice(1);
-  show(PATHS[h] ? h : (h ? "recipes" : (store.get("view") || "recipes")));
+  show(PATHS[h] || h === "finder" ? h : (h ? "recipes" : (store.get("view") || "recipes")));
 }
 
 boot().catch(() => { $("card").innerHTML = '<p class="empty">The recipe list didn\'t load. Reload the page to try again.</p>' });
