@@ -203,7 +203,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
     <label>Daily bonus <select id="s-daily"><option value="0">none</option><option value="0.1">+10%</option><option value="0.2">+20%</option></select> for <select id="s-dailycat"></select></label>
   </span>
   <label><input type="checkbox" id="s-prem"> Premium (4% tax instead of 8%)</label>
-  <label>Station fee per craft <input id="s-fee" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></label>
+  <label title="The usage fee a station shows when you right-click it on the city map (N). A craft uses item value × 0.1125 nutrition.">Station fee per 100 nutrition <input id="s-fee" type="number" min="0" step="50" inputmode="numeric" placeholder="0"></label>
 </div>
 
 <section id="view-finder" class="finder" hidden>
@@ -356,7 +356,7 @@ function craftParts(id, lvl, ml, o) {
       if (p == null) return { label: recipeLabel(recs, i), missing: true };
       if (art) gone += p * cnt; else back += p * cnt;
     }
-    return { label: recipeLabel(recs, i), back, gone, n: r.n };
+    return { label: recipeLabel(recs, i), back, gone, n: r.n, fee: stationFee(r) };
   });
   const u = recs[0].u;
   if (u && lvl !== "0") {
@@ -366,7 +366,10 @@ function craftParts(id, lvl, ml, o) {
   return parts;
 }
 // Artifacts, tomes and sigils (art) never come back; the rest returns at the return rate.
-const partCost = (p, rr) => p.missing ? null : p.upgrade ? p.fixed : (p.back * (1 - rr) + p.gone + (+S.fee || 0)) / p.n;
+const partCost = (p, rr) => p.missing ? null : p.upgrade ? p.fixed : (p.back * (1 - rr) + p.gone + p.fee) / p.n;
+// A craft uses item value × 0.1125 nutrition (r.v is the item value of the craft's ingredients, from the game files),
+// and the station charges its fee per 100 nutrition.
+const stationFee = r => (r.v || 0) * 0.1125 * (+S.fee100 || 0) / 100;
 function recipeLabel(recs, i) {
   if (recs.length === 1) return "Craft it";
   const art = recs[i].m.find(m => m[2]);
@@ -478,7 +481,7 @@ function profitHtml() {
   html += `<div class="tablewrap"><table><thead><tr><th>How you get it</th><th class="num">Real cost</th><th class="num">Profit</th></tr></thead><tbody>
     ${e.opts.map(o => `<tr${o === e.best && e.opts.length > 1 ? ' class="best"' : ""}><td>${esc(o.label)}${o === e.best && e.opts.length > 1 ? ' <span class="pill good">cheapest</span>' : ""}</td><td class="num">${fmt(o.cost)}</td><td class="num">${o.cost != null && e.net != null ? signed(e.net - o.cost) : "—"}</td></tr>`).join("")}
     </tbody></table></div><ul>`;
-  html += `<li>Real cost = materials × ${Math.round((1 - e.rr) * 1000) / 10}% (a ${Math.round(e.rr * 1000) / 10}% return rate${S.rr === "auto" ? (cityBonus(current, e.craftLoc) ? ` with ${esc(e.craftLoc)}'s bonus for this item` : ` in ${esc(e.craftLoc)}, which has no bonus for this item`) + (S.focus ? " and focus" : "") : ""}) + artifacts, tomes and sigils at full price, because those never come back${+S.fee ? ` + ${fmt(+S.fee)} station fee` : ""}.</li>`;
+  html += `<li>Real cost = materials × ${Math.round((1 - e.rr) * 1000) / 10}% (a ${Math.round(e.rr * 1000) / 10}% return rate${S.rr === "auto" ? (cityBonus(current, e.craftLoc) ? ` with ${esc(e.craftLoc)}'s bonus for this item` : ` in ${esc(e.craftLoc)}, which has no bonus for this item`) + (S.focus ? " and focus" : "") : ""}) + artifacts, tomes and sigils at full price, because those never come back${+S.fee100 && e.best && !e.best.upgrade ? ` + a ${fmt(e.best.fee / e.best.n)} station fee (${fmt(e.best.fee * 100 / +S.fee100)} nutrition at ${fmt(+S.fee100)} per 100)` : ""}.</li>`;
   if (h) html += h.vol ? `<li>About <b class="mono">${fmt(h.vol)}</b> sell per day in ${esc(cityEl.value)} (28-day average, all qualities). Craft <b class="mono">${fmt(Math.max(1, h.vol * 0.2))}–${fmt(Math.max(1, h.vol * 0.3))}</b> at a time (20–30% of daily sales) so they sell in a day or two.</li>`
     : `<li class="old">No recorded sales in ${esc(cityEl.value)} over the last 28 days. Craft one or two to test before making a batch.</li>`;
   if (!e.best) html += `<li class="old">Some material prices are missing in ${esc(matLoc())}, so the cost can't be worked out. Nobody may be selling them there right now.</li>`;
@@ -850,11 +853,11 @@ function setupSettings() {
   const cats = [...new Set(Object.values(DB.items).map(i => i.k).filter(Boolean))].sort();
   dc.innerHTML = '<option value="">its category</option>' + cats.map(k => `<option value="${k}">${esc(pretty(k))}</option>`).join("");
   rr.value = S.rr; $("s-focus").checked = !!S.focus; $("s-daily").value = String(S.daily || 0); dc.value = S.dailyCat || "";
-  $("s-prem").checked = !!S.premium; $("s-fee").value = S.fee || "";
+  $("s-prem").checked = !!S.premium; $("s-fee").value = S.fee100 || "";
   const sync = () => { const auto = rr.value === "auto"; $("s-auto").hidden = !auto };
   const save = () => {
     S.rr = rr.value; S.focus = $("s-focus").checked; S.daily = +$("s-daily").value; S.dailyCat = dc.value;
-    S.premium = $("s-prem").checked; S.fee = Math.max(0, +$("s-fee").value || 0);
+    S.premium = $("s-prem").checked; S.fee100 = Math.max(0, +$("s-fee").value || 0);
     store.set("settings", S); sync();
     if (current) renderCard();
     renderFinder();
@@ -891,7 +894,7 @@ const PATHS = {
       { title: "Learn the crafting math", why: "The one calculation that decides whether an item is worth making.", steps: [
         { id: "c-rr", title: "Know your return rate", detail: "Part of the materials comes back after each craft.<ul><li>Island: <b>0%</b> (never craft there)</li><li>Royal city: about <b>15%</b></li><li>City with a bonus for that item: about <b>25%</b></li><li>With focus: close to <b>50%</b></li><li>Hideout: about <b>40%</b></li></ul>" },
         { id: "c-formula", title: "Work out the real cost", detail: "<b>Real cost = materials × (1 − return rate) + artifact.</b> Artifacts are never returned. Then compare with the market price. Video example, Hellion Hood: 8 leather at about 2,100 = 17,000 × 85% = 14,450, plus the Demonhide Padding artifact. Check it in the Recipes tab.", link: { item: "T4_HEAD_LEATHER_HELL", text: "Open the Hellion Hood recipe" } },
-        { id: "c-fees", title: "Add the fees", detail: "<b>Station fee</b>: press <b>N</b> for the city map and hover the stations; use the cheapest one. <b>Market</b>: 4% or 8% tax plus the 2.5% listing fee. About 10% in total, which is fine for the right items." }
+        { id: "c-fees", title: "Add the fees", detail: "<b>Station fee</b>: press <b>N</b> for the city map, right-click the station type and compare the fee per 100 nutrition; use the cheapest one and enter its fee at the top of the Recipes tab. <b>Market</b>: 4% or 8% tax plus the 2.5% listing fee. About 10% in total, which is fine for the right items." }
       ]},
       { title: "Make your first profit", why: "Tier 4 and 5 are where most profitable items are. Higher tiers only mean more items to choose from.", steps: [
         { id: "c-find", title: "Find candidate items", detail: "Go through the Destiny Board from the bottom up, or inspect what other players are wearing. Artifact items face less competition because nobody can mass-produce them. A big jump in price overnight (50k to 100k) is almost always a sign of profit." },
