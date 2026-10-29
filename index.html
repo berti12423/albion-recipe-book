@@ -166,6 +166,17 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 .chips button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent) }
 .chips button.red::after { content: " ⚠"; color: var(--warn) }
 .settings-group { display: contents }
+.guide { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
+.guide .toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .92rem; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px }
+.guide .toc a { color: var(--accent); text-decoration: none }
+.guide .toc a:hover { text-decoration: underline }
+.guide article p, .guide article li { font-size: .97rem }
+.guide article ul, .guide article ol { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; margin: 8px 0 }
+.guide article p { margin: 8px 0 }
+.guide .formula { font: 500 1rem var(--mono); background: var(--accent-soft); border-radius: 8px; padding: 10px 14px }
+.guide .tip { background: var(--bg); border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 0 6px 6px 0 }
+.guide table { margin: 6px 0 }
+.guide article { scroll-margin-top: 12px }
 .finder label.chk { display: flex; gap: 6px; align-items: center; font-size: .9rem; color: var(--muted) }
 </style>
 </head>
@@ -186,6 +197,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 <nav class="tabs" role="tablist" aria-label="Sections">
   <button role="tab" id="tab-recipes" data-view="recipes" aria-selected="true">Recipes</button>
   <button role="tab" id="tab-finder" data-view="finder" aria-selected="false">Profit finder</button>
+  <button role="tab" id="tab-guide" data-view="guide" aria-selected="false">Guide</button>
   <button role="tab" id="tab-crafting" data-view="crafting" aria-selected="false">Crafting path<span class="pct" id="pct-crafting"></span></button>
   <button role="tab" id="tab-island" data-view="island" aria-selected="false">Island path<span class="pct" id="pct-island"></span></button>
 </nav>
@@ -243,6 +255,207 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   </div>
   <p class="note" id="f-note">Pick your filters and press Scan. Prices come from the Albion Online Data Project; scanning everything takes about a minute, a single category a few seconds.</p>
   <div class="card"><div class="tablewrap" id="f-out"></div></div>
+</section>
+
+<section id="view-guide" class="guide" hidden>
+  <div class="path-head"><div><h2>Crafting profit guide</h2>
+    <p>Everything that matters for making silver with crafting, in one page. Drawn from about 250 videos and shorts by Nendys, a crafter with over 7 years and billions of silver made, checked against the game files where numbers are involved.</p></div></div>
+  <nav class="toc" aria-label="On this page">
+    <a href="#g-rule">1. The one rule</a><a href="#g-math">2. The math</a><a href="#g-rr">3. Return rates</a><a href="#g-find">4. Finding items</a>
+    <a href="#g-amount">5. How many to make</a><a href="#g-earners">6. Dependable earners</a><a href="#g-cheaper">7. Making it cheaper</a><a href="#g-extras">8. Free extras</a>
+    <a href="#g-sell">9. Selling</a><a href="#g-level">10. Leveling up</a><a href="#g-bm">11. The black market</a><a href="#g-potions">12. Potions and food</a>
+    <a href="#g-refine">13. Refining</a><a href="#g-focus">14. Focus, spec and high tiers</a><a href="#g-travel">15. Transport</a><a href="#g-avoid">16. Mistakes to avoid</a><a href="#g-plan">17. A plan from zero</a>
+  </nav>
+
+  <article class="stage" id="g-rule"><h3>1. The one rule: do the math before every craft</h3>
+    <p>Crafting doesn't need billions, max spec, premium or focus. It needs you to know, before you buy a single material, what the item costs you to make and what you'll get for it. Without that you can't tell whether you're making silver or losing it. Everything else in this guide is about getting those two numbers right and acting on them.</p>
+    <p class="tip">The <button class="link" data-go="recipes">Recipes</button> tab does this math for any item, and the <button class="link" data-go="finder">Profit finder</button> does it for every item at once.</p>
+  </article>
+
+  <article class="stage" id="g-math"><h3>2. The math</h3>
+    <p class="formula">Real cost = materials × (1 − return rate) + artifacts at full price + station fee</p>
+    <ul>
+      <li><b>Return rate</b> is the share of materials you get back after a craft, like leftovers. Don't count what you get back; count what you <i>use</i>. At a 15% return rate you pay for 85% of the materials.</li>
+      <li><b>Artifacts never come back</b>, and neither do tomes of insight, royal sigils, crystallized artifacts, faction tokens or Avalonian energy. Add them after applying the return rate.</li>
+      <li><b>Several items per craft</b> (potions, food): divide the cost by how many one craft makes, usually 5 or 10.</li>
+      <li><b>Selling costs</b>: market tax is <b>8%</b> without premium and <b>4%</b> with it, plus a <b>2.5% setup fee</b> on every sell or buy order you place, paid again each time you relist.</li>
+      <li><b>Station fee</b>: a craft uses item value × 0.1125 nutrition, and the station charges its fee per 100 nutrition. Press N, right-click the station type and pick the cheapest one.</li>
+    </ul>
+    <p><b>Worked example</b>: Adept's Stalker Hood needs 8 worked leather at 348 and an Imbued Visor at 1,700. 8 × 348 = 2,784 × 85% = 2,366, plus 1,700 = <b>4,066</b> to make. It sold for 8,999; after 8% tax and 2.5% you keep 8,054, so about <b>4,000 profit</b>, almost double your money.</p>
+    <p><b>Aim for 20–30% on cost or more.</b> That leaves room for a relist or a price dip. With a lot of capital you can accept less, because 10% of a billion is still a lot; with a small budget you need the higher margins.</p>
+  </article>
+
+  <article class="stage" id="g-rr"><h3>3. Return rates</h3>
+    <p>Every royal city gives an 18% production bonus. Each city adds 15% more for its own item types, and 40% more for refining its resource. Focus adds 59%, and daily bonuses add 10% or 20% for one category. The return rate is <span class="mono">1 − 1 / (1 + bonus)</span>:</p>
+    <div class="tablewrap"><table class="rr"><thead><tr><th>Where</th><th class="num">Bonus</th><th class="num">Return rate</th></tr></thead><tbody>
+      <tr><td>Island</td><td class="num">0%</td><td class="num">0%</td></tr>
+      <tr><td>Any royal city</td><td class="num">18%</td><td class="num">15.2%</td></tr>
+      <tr><td>City with a bonus for the item</td><td class="num">33%</td><td class="num">24.8%</td></tr>
+      <tr><td>Refining in the resource's city</td><td class="num">58%</td><td class="num">36.7%</td></tr>
+      <tr><td>Royal city with focus</td><td class="num">77%</td><td class="num">43.5%</td></tr>
+      <tr><td>Bonus city with focus</td><td class="num">92%</td><td class="num">47.9%</td></tr>
+      <tr><td>A strong guild hideout (quality 5 zone, fully powered)</td><td class="num"></td><td class="num">about 53%</td></tr>
+    </tbody></table></div>
+    <p>Which city gives the bonus for what, from the game files:</p>
+    <div class="tablewrap" id="g-bonus"></div>
+    <p>The bonus city isn't always the best place to craft: everyone crafts there, so materials cost more and the finished items sell for less. For cheap tier 4–5 items the extra 10% barely changes your profit, so Nendys usually crafts and sells wherever is convenient. It matters most for expensive crafts like 8.4 items, where one extra material back can be worth millions. Aim for a 50%+ return rate there (bonus city with focus on a bonus day, or a hideout): with 8 materials, 48% gives 3 back plus a chance of a 4th, while 50% guarantees 4.</p>
+  </article>
+
+  <article class="stage" id="g-find"><h3>4. Finding profitable items</h3>
+    <p>This is the hardest part, and where most new crafters give up. Ways that work:</p>
+    <ul>
+      <li><b>Check what worked before.</b> If an item was profitable once, it often still is. Nendys' first profitable item seven years ago, the Fiend Cowl, still was.</li>
+      <li><b>The Armory (X).</b> It shows the builds players actually run. Gear that appears in many builds (Battle Axe 4.2, Fiend Cowl) has steady demand.</li>
+      <li><b>Inspect players (Y)</b> and look at what they wear. If they wear it, they bought it.</li>
+      <li><b>Notice prices you pay yourself.</b> If something you buy every day keeps getting more expensive, craft it.</li>
+      <li><b>Prices that make no sense</b> mean too few crafters: a 4.0 item for 27k when they're usually dirt cheap, or sandals selling for more than robes even though robes take twice the cloth. A big overnight jump is almost always profit.</li>
+      <li><b>Spread out.</b> If one tier or enchantment is profitable, check the others, and check other cities. The same item is often profitable in several.</li>
+      <li><b>Off-meta and "boring" items</b> like toolkits, gathering gear and fishing rods have fewer people looking for profit in them.</li>
+      <li><b>Low tiers beat high tiers</b> for most players. Profitable items are easier to find at tier 4 and 5 than at tier 8.</li>
+    </ul>
+    <p class="tip">The <button class="link" data-go="finder">Profit finder</button> scans every item for you. Check its suggestions in game before a big batch.</p>
+  </article>
+
+  <article class="stage" id="g-amount"><h3>5. How many to make</h3>
+    <p>Open the item's price chart in the market and pick 4 weeks; each bar is one day. Add up the daily sales <b>across all qualities</b>, because each quality sells separately. Then craft <b>20–30% of one day's sales</b>. Nine times out of ten your items sell by the next day and you don't get undercut into a price war.</p>
+    <p>Example: a Battle Axe 4.2 sold about 330 a day (71 normal, 126 good, 58 outstanding, 75 excellent), so 65–100 is a safe batch. If you're short on silver, make fewer.</p>
+    <p>Keep about <b>2.5% of your stock's value in cash</b> to pay the setup fee when you list. Running out of silver to list is a common, avoidable problem.</p>
+  </article>
+
+  <article class="stage" id="g-earners"><h3>6. Dependable earners</h3>
+    <p>Categories that have been profitable for years and need no spec, or very little:</p>
+    <ul>
+      <li><b>Royal items</b> (royal sandals, cowls, helmets, jackets in 4.2–4.3). You need the base item plus royal sigils. The royal item keeps the base item's quality, so you can buy a cheap 4.0, enchant it to 4.3 with runes, souls and relics, and get a guaranteed quality result. Royal sandals sell around 250 a day.</li>
+      <li><b>Faction capes</b>. 99% of players wear a cape, and they sell over a thousand a day per city. You need a plain cape, the faction's crest and its heart. Like royal items, they keep the base cape's quality.</li>
+      <li><b>Artifact potions</b> (tornado, calming, cleansing, hellfire, gathering). The artifact ingredient means nobody can mass-produce them, so margins stay higher than plain potions.</li>
+      <li><b>Gathering gear for the city's biome</b>: skinner gear in Bridgewatch, ore in Thetford and so on. Make the full set: cap, garb and boots.</li>
+      <li><b>Fishing rods and tools.</b> Fishing rods have quality, so better rolls sell for a lot more. Avalonian rods are made mostly from Avalonian energy: multiply the energy needed by its price, and if that's well under the sell price, it's profitable.</li>
+      <li><b>Meta gear</b> like Stalker and Hellion hoods, Fiend Cowls and Battle Axes. Stalker hoods 4.1 cost about 6k to make and sold for 15k.</li>
+      <li><b>Bags and satchels.</b> Everyone needs a bag, especially crafters and refiners. Satchels need a tome of insight.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-cheaper"><h3>7. Making it cheaper</h3>
+    <ul>
+      <li><b>The crystallized recipe.</b> Every artifact item has a second recipe that uses a crystallized artifact instead, such as Crystallized Dread instead of the Infernal Cloth Visor for the Fiend Cowl. Hardly anyone checks it, and it's often half the price.</li>
+      <li><b>Buy it lower and enchant it.</b> An enchanted item can often be made more cheaply by buying the enchantment below and upgrading it at the Artifact Foundry: runes for .0→.1, souls for .1→.2, relics for .2→.3, in multiples of 96 depending on the item.</li>
+      <li><b>Break artifacts down (transmutation).</b> At the Alchemist's Lab, a tier 7 tracking artifact breaks into two tier 5s, and a tier 5 into two tier 3s. When the tier 3 you need is overpriced, buy a higher tier and break it down.</li>
+      <li><b>Buy it already made.</b> You don't have to craft every step. If the base sandal or cape is cheaper on the market than crafting it, buy it.</li>
+      <li><b>Buy orders.</b> Placing buy orders for materials gets them cheaper if you can wait. Big quantities of high-tier materials are often cheaper from refiners on Discord or in trade chat.</li>
+      <li><b>Buy the expensive part where it's cheapest.</b> For an item driven by one costly ingredient, buying it in another city can save far more than the travel planner fee.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-extras"><h3>8. Free extras</h3>
+    <ul>
+      <li><b>Journals.</b> Buy empty journals for the station you craft at (blacksmith, hunter, mage, tinker) in the tier you craft. They fill automatically while you craft, and full ones usually sell for about double. They often cover all your fees. Check first: if empty and full cost about the same, skip them. Laborers on your island sell journals too, often cheaper than the market.</li>
+      <li><b>Salads.</b> A crafting salad raises your crafting quality; eat another every 2 minutes while you work. Better quality sells for more. The exception is the black market, which buys the cheapest quality first.</li>
+      <li><b>Fame bonuses.</b> Event items like the anniversary cake or the Hallowed Treat add 15% fame for a while, which makes a big batch also a fast level-up.</li>
+      <li><b>Feeding stations.</b> Some station owners pay you to feed their station. Food you craft can be fed straight in for silver, which levels your cooking with no selling at all.</li>
+      <li><b>Masterpieces.</b> Keep them, or enchant them for extra profit, but never count on them. If an item only pays when you roll high quality, you're gambling, not crafting.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-sell"><h3>9. Selling</h3>
+    <ul>
+      <li><b>Use sell orders, 1 silver under the cheapest.</b> That puts you first in line. Selling instantly into a buy order is faster but usually pays less; do it when the gap is small.</li>
+      <li><b>Be patient.</b> Every relist costs another 2.5%. Only change your price when you're completely buried and won't sell any time soon. An item sitting for a few days at 20%+ still beats silver doing nothing.</li>
+      <li><b>Don't sell in the bonus city for that item.</b> Supply is highest there and prices lowest. Sell where it's scarce.</li>
+      <li><b>Bonus days</b> bring lots of crafted items and higher material prices. If prices dip, keep your items in the bank for a few days until they recover.</li>
+      <li><b>Ignore the estimated market value.</b> It's often wrong. Look at real listings and the sales chart.</li>
+      <li><b>Watch the trade chat</b> for deals, but if a deal looks too good to be true, it probably is.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-level"><h3>10. Leveling up</h3>
+    <ul>
+      <li><b>Mastery</b> unlocks higher tiers. <b>Specialization</b> raises quality and lowers the focus cost of one item, so it only matters a lot once you craft that item with focus.</li>
+      <li><b>Tier 2 and 3 are for unlocking, not profit.</b> Players only buy them to level up, so they rarely sell above cost.</li>
+      <li><b>Studying</b> an item destroys it and gives 275% of its crafting fame, about three crafts' worth. Buying cheap tier 2–3 items and studying them is usually the cheapest way to tier 4. Learning points are mostly wasted on crafting.</li>
+      <li><b>From tier 4 up, level by crafting things that make profit.</b> You get the spec for free while earning. Crafting for the black market, which buys everything, makes even off-meta lines worth leveling.</li>
+      <li>The site's <button class="link" data-go="recipes">recipe cards</button> show the Destiny Board path to each item's tier.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-bm"><h3>11. The black market</h3>
+    <p>The black market in Caerleon buys crafted items so they can appear as loot in chests, mobs and dungeons. It doesn't care about the meta: it buys every item, so items nobody wears have the least competition.</p>
+    <ul>
+      <li>It prefers <b>non-artifact items</b> (the first three items of each line), <b>low tiers</b>, <b>low enchantments</b> (.0 and .1) and <b>low quality</b>. Within artifact items, cheaper artifacts sell more. Crystal weapons don't sell there at all.</li>
+      <li>Its buy orders start low and rise the longer nobody fills them. Sell into a high buy order, or list a sell order and wait for its buy order to reach you.</li>
+      <li>It only buys at or above the quality it asks for. An outstanding item can't fill an excellent order.</li>
+      <li>The black market doesn't show other players' sell orders, so keep one copy of each item you trade to check the real competition in its sell tab.</li>
+      <li>You can stay safe by buying in the Caerleon market, crafting in Caerleon and selling to the black market without leaving the city. Hauling from the royal cities pays more but is a red-zone trip.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-potions"><h3>12. Potions and food</h3>
+    <ul>
+      <li>Potions are made at the Alchemist's Lab. Each type comes in every other tier (tornado potions at 4, 6 and 8, for example), and you unlock each tier by crafting the one below. Tier 2 health and energy potions are almost never profitable; level through them by studying.</li>
+      <li>On the Destiny Board potion tree, <b>left of the line are artifact potions</b> and right are plain ones. Artifact potions are harder to mass-produce and usually more profitable.</li>
+      <li>Potions and food are consumed constantly, so they sell fast and keep selling. Gear is only bought again when it's lost.</li>
+      <li><b>Enchanted potions</b> need arcane extracts (basic for .1, refined for .2, pure for .3), made from rare animal remains. Breaking a tracking artifact gives a fixed amount of remains (5 for tier 3, 10 for tier 5, 25 for tier 7), so divide the artifact's price by that to compare. Enchanted potions and food generally need focus to be profitable.</li>
+      <li><b>Food</b> is crafted at the Cook. Fish sauce enchants it. Caerleon has the food bonus, so craft and sell elsewhere. Every crafting station needs food to run, so cheap station food has a hidden steady demand.</li>
+      <li>Butter, flour and meat are refined ingredients. City mills run out of capacity quickly, so this is the one thing worth doing on your island: build a mill there.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-refine"><h3>13. Refining</h3>
+    <ul>
+      <li>Refining turns raw resources into refined ones. Every refine above tier 2 also needs the refined material of the tier below (tier 5 bars need tier 5 ore plus tier 4 bars).</li>
+      <li>Always refine in the resource's bonus city (36.7% back): hides in Martlock, ore in Thetford, stone in Bridgewatch, fiber in Lymhurst, wood in Fort Sterling.</li>
+      <li>Raw resources cost more in the refining city, so buy them in a city whose biome gathers them and haul them in on an ox through blue and yellow zones. Then sell the refined material outside the refining city too.</li>
+      <li>Buy orders for raw resources fill fast and cut your cost. Chain refining (using your own lower-tier output) lowers it further.</li>
+      <li>Tier 3 is cheap, sells fast and is a good place to start. Refining bonus days push the return rate higher, but the next few days are crowded.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-focus"><h3>14. Focus, spec and high tiers</h3>
+    <ul>
+      <li>Premium gives 10,000 focus a day, up to 30,000 stored. Without premium you can still use focus potions from journals and weekly chests.</li>
+      <li>Spend focus where it earns the most per point: expensive crafts, enchanted potions and food, and refining. Watering crops with focus pays very little.</li>
+      <li>Focus is a recurring cycle: craft the same item every 3 days when your focus is full.</li>
+      <li>High-tier crafting (8.3, 8.4) is where mistakes cost millions. Craft only at 50%+ return rate, and buy materials in bulk from refiners. Items that expensive sell slowly, so do it every couple of weeks rather than every cycle.</li>
+      <li>Hideouts in good zones give the highest return rates in the game, but getting materials in and items out means black-zone logistics. Bring your own station food, since guild stations often run empty on bonus days.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-travel"><h3>15. Transport</h3>
+    <ul>
+      <li>Moving between royal cities through blue and yellow zones is safe; you can't be killed there. An ox carries about 30% more than a horse.</li>
+      <li>For light, valuable loads, the travel planner fee is often worth it compared with 30 minutes of walking.</li>
+      <li>Red-zone trips (Caerleon, the black market) are where new players lose everything. One bad death is enough to make people quit, so don't risk more than you can afford to lose.</li>
+      <li>If you do go: never cheap out on the transport set when the load is worth more than the set; build for tankiness and escape; take unusual paths away from main roads and chokepoints; and treat scouts and fresh player deaths as warnings to change route or log out and wait.</li>
+      <li>A cheap-looking set and a plain horse can make gankers ignore you because you don't look worth the effort.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-avoid"><h3>16. Mistakes to avoid</h3>
+    <ul>
+      <li>Crafting without doing the math first.</li>
+      <li>Crafting on your island (0% return rate).</li>
+      <li>Counting on high-quality rolls or masterpieces to make an item pay.</li>
+      <li>Crafting more than the market buys, then relisting again and again at 2.5% each time.</li>
+      <li>Spending all your silver and having none left for listing fees.</li>
+      <li>Selling in the bonus city, or dumping items cheap on a bonus day.</li>
+      <li>Buying artifacts at full price without checking the crystallized recipe or a lower enchantment.</li>
+      <li>Trusting troll listings: a price far above the usual. Check the sales chart.</li>
+      <li>Leaving silver sitting in your account. Even 20% profit beats nothing.</li>
+    </ul>
+  </article>
+
+  <article class="stage" id="g-plan"><h3>17. A plan from zero</h3>
+    <ol>
+      <li><b>Get your first silver.</b> Do a tier 4 expedition in a royal city (about 50k plus a royal sigil bag), then camps, dungeons or gathering. Aim for 250k–1M to start crafting.</li>
+      <li><b>Unlock tier 4</b> in one line by studying cheap tier 2 and 3 items.</li>
+      <li><b>Find 2–3 profitable items</b> with the Profit finder or the methods above, at 20%+ on cost.</li>
+      <li><b>Craft one batch</b>: 20–30% of daily sales, cheapest station, journals and a salad. List at 1 silver under.</li>
+      <li><b>Reinvest everything</b> and play normally while it sells. Repeat in a second city once one works.</li>
+      <li><b>At about 30M, buy premium.</b> Tax drops to 4% and you get focus. Then look at focus crafts, refining and an island.</li>
+      <li><b>Later</b>: high-tier crafting with 50%+ return rates, hideouts and the black market.</li>
+    </ol>
+    <p class="tip">Track your progress in the <button class="link" data-go="crafting">Crafting path</button> and <button class="link" data-go="island">Island path</button> tabs.</p>
+  </article>
+  <p class="note">Numbers were current when the videos were recorded; prices change every day, so always check live prices.</p>
 </section>
 
 <section id="view-crafting" class="path" hidden></section>
@@ -1018,7 +1231,7 @@ function goalOut() {
 
 function show(v) {
   view = v;
-  for (const k of ["recipes", "finder", "crafting", "island"]) {
+  for (const k of ["recipes", "finder", "guide", "crafting", "island"]) {
     $("view-" + k).hidden = k !== v;
     $("tab-" + k).setAttribute("aria-selected", k === v);
   }
@@ -1029,9 +1242,16 @@ function show(v) {
   store.set("view", v);
 }
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => show(b.dataset.view));
+// Guide: links to other tabs, in-page contents, and the city bonus table straight from CITY_BONUS.
+document.querySelectorAll("#view-guide [data-go]").forEach(b => b.onclick = () => { show(b.dataset.go); scrollTo(0, 0) });
+document.querySelectorAll("#view-guide .toc a").forEach(a => a.onclick = ev => { ev.preventDefault(); document.querySelector(a.getAttribute("href")).scrollIntoView({ behavior: "smooth" }) });
+$("g-bonus").innerHTML = `<table><thead><tr><th>City</th><th>Crafting +15%</th><th>Refining +40%</th><th>Butcher +10%</th></tr></thead><tbody>${Object.entries(CITY_BONUS).map(([city, b]) => {
+  const k = Object.keys(b), by = v => k.filter(x => b[x] === v).map(x => pretty(x.replace("meat_", ""))).join(", ") || "—";
+  return `<tr><td><b>${city}</b></td><td>${by(.15)}</td><td>${by(.4)}</td><td>${by(.1)}</td></tr>`;
+}).join("")}</tbody></table>`;
 {
   const h = location.hash.slice(1);
-  show(PATHS[h] || h === "finder" ? h : (h ? "recipes" : (store.get("view") || "recipes")));
+  show(PATHS[h] || h === "finder" || h === "guide" ? h : (h ? "recipes" : (store.get("view") || "recipes")));
 }
 
 boot().catch(() => { $("card").innerHTML = '<p class="empty">The recipe list didn\'t load. Reload the page to try again.</p>' });
