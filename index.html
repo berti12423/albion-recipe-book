@@ -172,6 +172,9 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 .matgrid table { table-layout: fixed; width: 100% }
 .matgrid table th, .matgrid table td { padding: 2px 3px; border: 0; text-align: center }
 .matgrid table th:first-child { width: 30px }
+.matgrid td { vertical-align: top }
+.matgrid .mage { display: block; font: .68rem var(--mono); color: var(--muted); line-height: 1.2 }
+.matgrid .mage.old { color: var(--warn) }
 .matgrid input { -moz-appearance: textfield; appearance: textfield; padding: 4px 3px }
 .matgrid input::-webkit-inner-spin-button, .matgrid input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0 }
 .matgrid input { width: 100%; min-width: 0; font: .85rem var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 4px 5px; text-align: right }
@@ -1099,7 +1102,15 @@ const MAT_RE = /^T(\d)_(PLANKS|METALBAR|CLOTH|LEATHER)(?:_LEVEL(\d))?(?:@\d)?$/;
 const WEAPON_K = new Set(["sword", "axe", "mace", "hammer", "crossbow", "knuckles", "bow", "dagger", "spear", "quarterstaff", "naturestaff", "firestaff", "holystaff", "arcanestaff", "froststaff", "cursestaff", "shapeshifterstaff"]);
 const ARMOR_K = /_(helmet|armor|shoes)$/;
 const matId = (type, t, e) => e ? `T${t}_${type}_LEVEL${e}@${e}` : `T${t}_${type}`;
-let MC = Object.assign({ prices: {}, city: "Fort Sterling", kind: "weapons", tier: "", ench: "0", art: true }, store.get("matcalc") || {});
+let MC = Object.assign({ prices: {}, dates: {}, city: "Fort Sterling", kind: "weapons", tier: "", ench: "0", art: true }, store.get("matcalc") || {});
+MC.dates ||= {};
+// Short age for a grid box: "40m", "5h", "3d"; red when over a day old.
+function shortAge(d) {
+  if (!d) return "";
+  const h = (Date.now() - new Date(d + (d.endsWith("Z") ? "" : "Z")).getTime()) / 36e5;
+  const t = h < 1 ? Math.max(1, Math.round(h * 60)) + "m" : h < 48 ? Math.round(h) + "h" : Math.round(h / 24) + "d";
+  return `<span class="mage${h > 24 ? " old" : ""}" title="Market price listed ${t} ago">${t}</span>`;
+}
 const saveMC = () => store.set("matcalc", MC);
 
 function setupMats() {
@@ -1116,16 +1127,17 @@ function setupMats() {
   one($("m-ench"), [0, 1, 2, 3, 4].map(e => [String(e), "." + e]), "ench");
   // One grid per material: tiers down, enchantments across (only tier 4+ can be enchanted).
   $("m-grids").innerHTML = MAT_TYPES.map(([type, label]) => `<div class="matgrid"><h4>${icon(matId(type, 4, 0), 24)} ${label}</h4><table><thead><tr><th></th>${[0, 1, 2, 3, 4].map(e => `<th>.${e}</th>`).join("")}</tr></thead><tbody>
-    ${[2, 3, 4, 5, 6, 7, 8].map(t => `<tr><th>T${t}</th>${[0, 1, 2, 3, 4].map(e => t < 4 && e ? "<td></td>" : `<td><input type="number" min="0" inputmode="numeric" data-mat="${matId(type, t, e)}" aria-label="${label} tier ${t}.${e}" value="${MC.prices[matId(type, t, e)] ?? ""}"></td>`).join("")}</tr>`).join("")}
+    ${[2, 3, 4, 5, 6, 7, 8].map(t => `<tr><th>T${t}</th>${[0, 1, 2, 3, 4].map(e => t < 4 && e ? "<td></td>" : `<td><input type="number" min="0" inputmode="numeric" data-mat="${matId(type, t, e)}" aria-label="${label} tier ${t}.${e}" value="${MC.prices[matId(type, t, e)] ?? ""}">${shortAge(MC.dates[matId(type, t, e)])}</td>`).join("")}</tr>`).join("")}
     </tbody></table></div>`).join("");
   $("m-grids").querySelectorAll("input[data-mat]").forEach(inp => inp.oninput = () => {
     const v = inp.value.trim();
     if (v === "" || isNaN(+v)) delete MC.prices[inp.dataset.mat]; else MC.prices[inp.dataset.mat] = +v;
+    delete MC.dates[inp.dataset.mat]; inp.parentElement.querySelector(".mage")?.remove();
     saveMC(); renderMats();
   });
   $("m-fill").onclick = () => fillMats(false);
   $("m-fillall").onclick = () => fillMats(true);
-  $("m-clear").onclick = () => { MC.prices = {}; saveMC(); setupMats(); renderMats() };
+  $("m-clear").onclick = () => { MC.prices = {}; MC.dates = {}; saveMC(); setupMats(); renderMats() };
 }
 
 function matsItems() {
@@ -1153,7 +1165,7 @@ function matCost(id, lvl, r) {
       // For weapons and armor, anything that isn't one of the four materials is an artifact: never returned.
       art = { id: mid, cnt };
       const p = getPrice(MC.city, mid);
-      if (p && p.s) gone += p.s * cnt; else art.missing = true;
+      if (p && p.s) { gone += p.s * cnt; art.d = p.d } else art.missing = true;
     }
   }
   if (missingMat) return { missingMat };
@@ -1187,7 +1199,7 @@ function renderMats() {
     const mats = r.m.filter(m => MAT_RE.test(m[0])).map(([m, n]) => `${n} ${MAT_TYPES.find(x => x[0] === MAT_RE.exec(m)[2])[1].toLowerCase()}`).join(" + ");
     html += `<tr data-open="${e.id}" data-l="${l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(e.name)}<span class="age">T${e.it.t}.${l}${r.n > 1 ? " · makes " + r.n : ""}</span></div></div></td>
       <td>${mats}</td><td class="num">${Math.round(c.rr * 1000) / 10}%</td><td class="num">${fmt(c.mats)}</td>
-      <td>${c.art ? `${esc(nameOf(c.art.id))}${c.art.cnt > 1 ? " ×" + c.art.cnt : ""}<span class="age">${c.artCost != null ? fmt(c.artCost) : "no price yet"}</span>` : "—"}</td>
+      <td>${c.art ? `${esc(nameOf(c.art.id))}${c.art.cnt > 1 ? " ×" + c.art.cnt : ""}<span class="age">${c.artCost != null ? fmt(c.artCost) + (c.art.d ? " · " + ageText(c.art.d).text : "") : "no price yet"}</span>` : "—"}</td>
       <td class="num">${c.fee ? fmt(c.fee) : "—"}</td><td class="num"><b>${c.total != null ? fmt(c.total) : "—"}</b></td></tr>`;
   }
   html += `</tbody></table>${rows.length > 600 ? '<p class="note" style="padding:0 12px 12px">Showing the first 600; pick a tier or enchantment to narrow it down.</p>' : ""}`;
@@ -1207,10 +1219,10 @@ async function fillMats(replace) {
     let filled = 0;
     for (const id of ids) {
       const p = getPrice(MC.city, id);
-      if (p && p.s && (replace || MC.prices[id] == null)) { MC.prices[id] = p.s; filled++ }
+      if (p && p.s && (replace || MC.prices[id] == null)) { MC.prices[id] = p.s; MC.dates[id] = p.d; filled++ }
     }
     saveMC(); setupMats(); renderMats();
-    n.textContent = `Filled ${filled} boxes with the cheapest sell order in ${MC.city}. ` + n.textContent;
+    n.textContent = `Filled ${filled} boxes with the cheapest sell order in ${MC.city}; the small number under each box is how long ago that price was listed (red: over a day). ` + n.textContent;
   } catch (e) {
     n.textContent = e instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : e.message;
   }
