@@ -166,6 +166,16 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 .chips button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent) }
 .chips button.red::after { content: " ⚠"; color: var(--warn) }
 .settings-group { display: contents }
+.matgrids { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px }
+.matgrid { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px }
+.matgrid h4 { margin: 0 0 6px; font: 700 1rem var(--display); display: flex; gap: 8px; align-items: center }
+.matgrid table { table-layout: fixed; width: 100% }
+.matgrid table th, .matgrid table td { padding: 2px 3px; border: 0; text-align: center }
+.matgrid table th:first-child { width: 30px }
+.matgrid input { -moz-appearance: textfield; appearance: textfield; padding: 4px 3px }
+.matgrid input::-webkit-inner-spin-button, .matgrid input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0 }
+.matgrid input { width: 100%; min-width: 0; font: .85rem var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 4px 5px; text-align: right }
+#m-out tr.group td { font: 700 .95rem var(--display); background: var(--bg); padding-top: 12px }
 .guide { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px }
 .guide .toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .92rem; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px }
 .guide .toc a { color: var(--accent); text-decoration: none }
@@ -197,6 +207,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 <nav class="tabs" role="tablist" aria-label="Sections">
   <button role="tab" id="tab-recipes" data-view="recipes" aria-selected="true">Recipes</button>
   <button role="tab" id="tab-finder" data-view="finder" aria-selected="false">Profit finder</button>
+  <button role="tab" id="tab-mats" data-view="mats" aria-selected="false">Material costs</button>
   <button role="tab" id="tab-guide" data-view="guide" aria-selected="false">Guide</button>
   <button role="tab" id="tab-crafting" data-view="crafting" aria-selected="false">Crafting path<span class="pct" id="pct-crafting"></span></button>
   <button role="tab" id="tab-island" data-view="island" aria-selected="false">Island path<span class="pct" id="pct-island"></span></button>
@@ -255,6 +266,26 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   </div>
   <p class="note" id="f-note">Pick your filters and press Scan. Prices come from the Albion Online Data Project; scanning everything takes about a minute, a single category a few seconds.</p>
   <div class="card"><div class="tablewrap" id="f-out"></div></div>
+</section>
+
+<section id="view-mats" class="finder" hidden>
+  <div class="path-head"><div><h2>Material costs</h2>
+    <p>Type in what you pay for planks, metal bars, cloth and leather, and see what every weapon costs to make at every tier and enchantment. Uses your return rate and station fee from the bar above. Artifacts use live prices in the crafting city.</p></div></div>
+  <div class="fgrid">
+    <label class="fld">Craft in<select id="m-city"></select></label>
+    <label class="fld">Items<select id="m-kind"><option value="weapons">Weapons</option><option value="offhand">Off-hands</option><option value="armor">Armor</option><option value="all">Everything made from these</option></select></label>
+    <div class="fld">Tier<div class="chips" id="m-tier"></div></div>
+    <div class="fld">Enchantment<div class="chips" id="m-ench"></div></div>
+  </div>
+  <div class="matgrids" id="m-grids"></div>
+  <div class="controls">
+    <button class="primary" id="m-fill">Fill empty boxes from the market</button>
+    <button id="m-fillall">Replace all with market prices</button>
+    <button id="m-clear">Clear all</button>
+    <label class="chk"><input type="checkbox" id="m-art" checked> Include artifact items</label>
+  </div>
+  <p class="note" id="m-note">Prices are per unit. Leave a box empty to skip items that need it.</p>
+  <div class="card"><div class="tablewrap" id="m-out"></div></div>
 </section>
 
 <section id="view-guide" class="guide" hidden>
@@ -641,6 +672,8 @@ async function boot() {
   [...cats].sort((a, b) => a[1].localeCompare(b[1])).forEach(([v, t]) => $("cat").add(new Option(t, v)));
   setupSettings();
   setupFinder();
+  setupMats();
+  if (view === "mats") renderMats();
   [...tiers].sort((a, b) => a - b).forEach(t => $("tier").add(new Option("Tier " + t, t)));
   const start = location.hash.slice(1);
   renderList();
@@ -1060,6 +1093,130 @@ function renderFinder() {
 let fromFinder = null;
 const short = n => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "m" : n >= 1e3 ? Math.round(n / 1e3) + "k" : fmt(n);
 
+// Material costs: your own prices for the four refined materials, and what every weapon (or armor) costs to make with them.
+const MAT_TYPES = [["PLANKS", "Planks"], ["METALBAR", "Metal bars"], ["CLOTH", "Cloth"], ["LEATHER", "Leather"]];
+const MAT_RE = /^T(\d)_(PLANKS|METALBAR|CLOTH|LEATHER)(?:_LEVEL(\d))?(?:@\d)?$/;
+const WEAPON_K = new Set(["sword", "axe", "mace", "hammer", "crossbow", "knuckles", "bow", "dagger", "spear", "quarterstaff", "naturestaff", "firestaff", "holystaff", "arcanestaff", "froststaff", "cursestaff", "shapeshifterstaff"]);
+const ARMOR_K = /_(helmet|armor|shoes)$/;
+const matId = (type, t, e) => e ? `T${t}_${type}_LEVEL${e}@${e}` : `T${t}_${type}`;
+let MC = Object.assign({ prices: {}, city: "Fort Sterling", kind: "weapons", tier: "", ench: "0", art: true }, store.get("matcalc") || {});
+const saveMC = () => store.set("matcalc", MC);
+
+function setupMats() {
+  const city = $("m-city");
+  city.innerHTML = CITIES.map(c => `<option>${c}</option>`).join("");
+  city.value = MC.city; city.onchange = () => { MC.city = city.value; saveMC(); renderMats() };
+  $("m-kind").value = MC.kind; $("m-kind").onchange = () => { MC.kind = $("m-kind").value; saveMC(); renderMats() };
+  $("m-art").checked = MC.art; $("m-art").onchange = () => { MC.art = $("m-art").checked; saveMC(); renderMats() };
+  const one = (el, items, key) => {
+    el.innerHTML = `<button type="button" data-v="" aria-pressed="${MC[key] === ""}">All</button>` + items.map(([v, t]) => `<button type="button" data-v="${v}" aria-pressed="${MC[key] === v}">${t}</button>`).join("");
+    el.querySelectorAll("button").forEach(b => b.onclick = () => { MC[key] = b.dataset.v; saveMC(); el.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); renderMats() });
+  };
+  one($("m-tier"), [2, 3, 4, 5, 6, 7, 8].map(t => [String(t), "T" + t]), "tier");
+  one($("m-ench"), [0, 1, 2, 3, 4].map(e => [String(e), "." + e]), "ench");
+  // One grid per material: tiers down, enchantments across (only tier 4+ can be enchanted).
+  $("m-grids").innerHTML = MAT_TYPES.map(([type, label]) => `<div class="matgrid"><h4>${icon(matId(type, 4, 0), 24)} ${label}</h4><table><thead><tr><th></th>${[0, 1, 2, 3, 4].map(e => `<th>.${e}</th>`).join("")}</tr></thead><tbody>
+    ${[2, 3, 4, 5, 6, 7, 8].map(t => `<tr><th>T${t}</th>${[0, 1, 2, 3, 4].map(e => t < 4 && e ? "<td></td>" : `<td><input type="number" min="0" inputmode="numeric" data-mat="${matId(type, t, e)}" aria-label="${label} tier ${t}.${e}" value="${MC.prices[matId(type, t, e)] ?? ""}"></td>`).join("")}</tr>`).join("")}
+    </tbody></table></div>`).join("");
+  $("m-grids").querySelectorAll("input[data-mat]").forEach(inp => inp.oninput = () => {
+    const v = inp.value.trim();
+    if (v === "" || isNaN(+v)) delete MC.prices[inp.dataset.mat]; else MC.prices[inp.dataset.mat] = +v;
+    saveMC(); renderMats();
+  });
+  $("m-fill").onclick = () => fillMats(false);
+  $("m-fillall").onclick = () => fillMats(true);
+  $("m-clear").onclick = () => { MC.prices = {}; saveMC(); setupMats(); renderMats() };
+}
+
+function matsItems() {
+  const out = [];
+  for (const e of DB.list) {
+    const k = e.it.k;
+    if (!k) continue;
+    const ok = MC.kind === "weapons" ? WEAPON_K.has(k) : MC.kind === "offhand" ? k === "offhand" : MC.kind === "armor" ? ARMOR_K.test(k) : WEAPON_K.has(k) || k === "offhand" || ARMOR_K.test(k);
+    if (!ok || (MC.tier && e.it.t !== +MC.tier)) continue;
+    for (const l of Object.keys(e.it.r)) if (!MC.ench || l === MC.ench) out.push({ e, l });
+  }
+  return out;
+}
+
+// Cost of one recipe with your material prices and live artifact prices in the crafting city.
+function matCost(id, lvl, r) {
+  const rr = returnRate(id, MC.city);
+  let back = 0, gone = 0, missingMat = null, art = null;
+  for (const [mid, cnt] of r.m) {
+    if (MAT_RE.test(mid)) {
+      const p = MC.prices[mid];
+      if (p == null) { missingMat = mid; continue }
+      back += p * cnt;
+    } else {
+      // For weapons and armor, anything that isn't one of the four materials is an artifact: never returned.
+      art = { id: mid, cnt };
+      const p = getPrice(MC.city, mid);
+      if (p && p.s) gone += p.s * cnt; else art.missing = true;
+    }
+  }
+  if (missingMat) return { missingMat };
+  const fee = stationFee(r);
+  return { rr, mats: back * (1 - rr) / r.n, art, artCost: art && !art.missing ? gone / r.n : null, fee: fee / r.n,
+    total: art && art.missing ? null : (back * (1 - rr) + gone + fee) / r.n };
+}
+
+function renderMats() {
+  if (!DB) return;
+  const out = $("m-out"), rows = [];
+  for (const { e, l } of matsItems()) {
+    const recs = e.it.r[l];
+    const hasArt = recs.some(r => r.m.some(m => !MAT_RE.test(m[0])));
+    if (hasArt && !MC.art) continue;
+    const costs = recs.map(r => ({ r, c: matCost(e.id, l, r) })).filter(x => !x.c.missingMat);
+    if (!costs.length) continue;
+    const best = costs.reduce((a, b) => (b.c.total ?? Infinity) < (a.c.total ?? Infinity) ? b : a);
+    rows.push({ e, l, best, recs });
+  }
+  const filled = Object.keys(MC.prices).length;
+  if (!filled) { out.innerHTML = '<p class="empty">Type in some material prices above, or press "Fill empty boxes from the market".</p>'; $("m-note").textContent = "Prices are per unit. Leave a box empty to skip items that need it."; return }
+  rows.sort((a, b) => a.e.it.k.localeCompare(b.e.it.k) || a.e.it.t - b.e.it.t || a.l - b.l || a.e.name.localeCompare(b.e.name));
+  const noArt = rows.filter(r => r.best.c.art && r.best.c.total == null).length;
+  $("m-note").textContent = `${rows.length.toLocaleString("en-US")} items can be priced with the materials you filled in.${noArt ? ` ${noArt} need an artifact with no price in ${MC.city} yet; press Fill to load artifact prices.` : ""} Real cost = materials × (1 − return rate) + artifact + station fee.`;
+  let html = `<table><thead><tr><th>Item</th><th>Materials</th><th class="num">Return rate</th><th class="num">Materials after return</th><th>Artifact</th><th class="num">Station fee</th><th class="num">Cost each</th></tr></thead><tbody>`;
+  let lastK = null;
+  for (const { e, l, best } of rows.slice(0, 600)) {
+    const c = best.c, r = best.r, pid = priceId(e.id, l);
+    if (e.it.k !== lastK) { html += `<tr class="group"><td colspan="7">${esc(pretty(e.it.k))}</td></tr>`; lastK = e.it.k }
+    const mats = r.m.filter(m => MAT_RE.test(m[0])).map(([m, n]) => `${n} ${MAT_TYPES.find(x => x[0] === MAT_RE.exec(m)[2])[1].toLowerCase()}`).join(" + ");
+    html += `<tr data-open="${e.id}" data-l="${l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(e.name)}<span class="age">T${e.it.t}.${l}${r.n > 1 ? " · makes " + r.n : ""}</span></div></div></td>
+      <td>${mats}</td><td class="num">${Math.round(c.rr * 1000) / 10}%</td><td class="num">${fmt(c.mats)}</td>
+      <td>${c.art ? `${esc(nameOf(c.art.id))}${c.art.cnt > 1 ? " ×" + c.art.cnt : ""}<span class="age">${c.artCost != null ? fmt(c.artCost) : "no price yet"}</span>` : "—"}</td>
+      <td class="num">${c.fee ? fmt(c.fee) : "—"}</td><td class="num"><b>${c.total != null ? fmt(c.total) : "—"}</b></td></tr>`;
+  }
+  html += `</tbody></table>${rows.length > 600 ? '<p class="note" style="padding:0 12px 12px">Showing the first 600; pick a tier or enchantment to narrow it down.</p>' : ""}`;
+  out.innerHTML = html;
+  out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
+}
+
+// Loads market prices for the materials (and the artifacts of the items shown) in the crafting city.
+async function fillMats(replace) {
+  const n = $("m-note"), ids = [];
+  for (const [type] of MAT_TYPES) for (let t = 2; t <= 8; t++) for (let e = 0; e <= (t < 4 ? 0 : 4); e++) ids.push(matId(type, t, e));
+  const arts = new Set();
+  for (const { e, l } of matsItems()) e.it.r[l].forEach(r => r.m.forEach(m => { if (!MAT_RE.test(m[0])) arts.add(m[0]) }));
+  $("m-fill").disabled = $("m-fillall").disabled = true;
+  try {
+    await fetchPrices([...ids, ...arts], [MC.city], (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${MC.city} prices… ${i} of ${t}`, { persist: false, qualities: "1" });
+    let filled = 0;
+    for (const id of ids) {
+      const p = getPrice(MC.city, id);
+      if (p && p.s && (replace || MC.prices[id] == null)) { MC.prices[id] = p.s; filled++ }
+    }
+    saveMC(); setupMats(); renderMats();
+    n.textContent = `Filled ${filled} boxes with the cheapest sell order in ${MC.city}. ` + n.textContent;
+  } catch (e) {
+    n.textContent = e instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : e.message;
+  }
+  $("m-fill").disabled = $("m-fillall").disabled = false;
+}
+
 // Settings bar.
 function setupSettings() {
   const rr = $("s-rr"), dc = $("s-dailycat");
@@ -1074,6 +1231,7 @@ function setupSettings() {
     store.set("settings", S); sync();
     if (current) renderCard();
     renderFinder();
+    renderMats();
   };
   ["s-rr", "s-focus", "s-daily", "s-dailycat", "s-prem"].forEach(id => $(id).onchange = save);
   $("s-fee").oninput = save;
@@ -1231,11 +1389,12 @@ function goalOut() {
 
 function show(v) {
   view = v;
-  for (const k of ["recipes", "finder", "guide", "crafting", "island"]) {
+  for (const k of ["recipes", "finder", "mats", "guide", "crafting", "island"]) {
     $("view-" + k).hidden = k !== v;
     $("tab-" + k).setAttribute("aria-selected", k === v);
   }
-  $("settings").hidden = !(v === "recipes" || v === "finder");
+  $("settings").hidden = !(v === "recipes" || v === "finder" || v === "mats");
+  if (v === "mats" && DB) renderMats();
   if (PATHS[v]) renderPath(v);
   const hash = v === "recipes" ? current : v;
   if (hash) try { history.replaceState(null, "", "#" + hash) } catch {}
@@ -1251,7 +1410,7 @@ $("g-bonus").innerHTML = `<table><thead><tr><th>City</th><th>Crafting +15%</th><
 }).join("")}</tbody></table>`;
 {
   const h = location.hash.slice(1);
-  show(PATHS[h] || h === "finder" || h === "guide" ? h : (h ? "recipes" : (store.get("view") || "recipes")));
+  show(PATHS[h] || ["finder", "guide", "mats"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")));
 }
 
 boot().catch(() => { $("card").innerHTML = '<p class="empty">The recipe list didn\'t load. Reload the page to try again.</p>' });
