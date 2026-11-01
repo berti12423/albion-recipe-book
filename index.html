@@ -287,7 +287,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
     <button id="m-clear">Clear all</button>
     <label class="chk"><input type="checkbox" id="m-art" checked> Include artifact items</label>
   </div>
-  <p class="note" id="m-note">Prices are per unit. Leave a box empty to skip items that need it.</p>
+  <p class="note" id="m-note">Prices are per unit. Leave a box empty to skip items that need it. Boxes filled from the market show how long ago the price was listed; boxes you typed yourself have no age.</p>
   <div class="card"><div class="tablewrap" id="m-out"></div></div>
 </section>
 
@@ -1220,6 +1220,8 @@ async function fillMats(replace) {
     for (const id of ids) {
       const p = getPrice(MC.city, id);
       if (p && p.s && (replace || MC.prices[id] == null)) { MC.prices[id] = p.s; MC.dates[id] = p.d; filled++ }
+      // A box still holding the market price (filled before ages existed) gets its age without being overwritten.
+      else if (p && p.s && MC.prices[id] === p.s) MC.dates[id] = p.d;
     }
     saveMC(); setupMats(); renderMats();
     n.textContent = `Filled ${filled} boxes with the cheapest sell order in ${MC.city}; the small number under each box is how long ago that price was listed (red: over a day). ` + n.textContent;
