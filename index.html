@@ -275,17 +275,20 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   <div class="path-head"><div><h2>Material costs</h2>
     <p>Type in what you pay for planks, metal bars, cloth and leather, and see what every weapon costs to make at every tier and enchantment. Uses your return rate and station fee from the bar above. Artifacts use live prices in the crafting city.</p></div></div>
   <div class="fgrid">
+    <label class="fld">Search<input id="m-q" type="search" placeholder="e.g. kingmaker, bow" autocomplete="off"></label>
     <label class="fld">Craft in<select id="m-city"></select></label>
+    <label class="fld">Sell in<select id="m-sell"></select></label>
     <label class="fld">Items<select id="m-kind"><option value="weapons">Weapons</option><option value="offhand">Off-hands</option><option value="armor">Armor</option><option value="all">Everything made from these</option></select></label>
     <div class="fld">Tier<div class="chips" id="m-tier"></div></div>
     <div class="fld">Enchantment<div class="chips" id="m-ench"></div></div>
   </div>
   <div class="matgrids" id="m-grids"></div>
   <div class="controls">
-    <button class="primary" id="m-fill">Fill empty boxes from the market</button>
+    <button class="primary" id="m-fill">Fill empty boxes and load sell prices</button>
     <button id="m-fillall">Replace all with market prices</button>
     <button id="m-clear">Clear all</button>
     <label class="chk"><input type="checkbox" id="m-art" checked> Include artifact items</label>
+    <label class="chk">Sort by <select id="m-sort"><option value="type">Weapon type</option><option value="profit">Profit each</option><option value="margin">Margin</option><option value="cost">Cost each</option></select></label>
   </div>
   <p class="note" id="m-note">Prices are per unit. Leave a box empty to skip items that need it. Boxes filled from the market show how long ago the price was listed; boxes you typed yourself have no age.</p>
   <div class="card"><div class="tablewrap" id="m-out"></div></div>
@@ -1102,7 +1105,7 @@ const MAT_RE = /^T(\d)_(PLANKS|METALBAR|CLOTH|LEATHER)(?:_LEVEL(\d))?(?:@\d)?$/;
 const WEAPON_K = new Set(["sword", "axe", "mace", "hammer", "crossbow", "knuckles", "bow", "dagger", "spear", "quarterstaff", "naturestaff", "firestaff", "holystaff", "arcanestaff", "froststaff", "cursestaff", "shapeshifterstaff"]);
 const ARMOR_K = /_(helmet|armor|shoes)$/;
 const matId = (type, t, e) => e ? `T${t}_${type}_LEVEL${e}@${e}` : `T${t}_${type}`;
-let MC = Object.assign({ prices: {}, dates: {}, city: "Fort Sterling", kind: "weapons", tier: "", ench: "0", art: true }, store.get("matcalc") || {});
+let MC = Object.assign({ prices: {}, dates: {}, city: "Fort Sterling", sell: "", kind: "weapons", tier: "", ench: "0", art: true, q: "", sort: "type" }, store.get("matcalc") || {});
 MC.dates ||= {};
 // Short age for a grid box: "40m", "5h", "3d"; red when over a day old.
 function shortAge(d) {
@@ -1117,6 +1120,11 @@ function setupMats() {
   const city = $("m-city");
   city.innerHTML = CITIES.map(c => `<option>${c}</option>`).join("");
   city.value = MC.city; city.onchange = () => { MC.city = city.value; saveMC(); renderMats() };
+  // Sell in: "" = the crafting city.
+  $("m-sell").innerHTML = '<option value="">Same as craft city</option>' + SELL_MARKETS.map(c => `<option>${c}</option>`).join("");
+  $("m-sell").value = MC.sell; $("m-sell").onchange = () => { MC.sell = $("m-sell").value; saveMC(); renderMats() };
+  $("m-q").value = MC.q; $("m-q").oninput = () => { MC.q = $("m-q").value; saveMC(); renderMats() };
+  $("m-sort").value = MC.sort; $("m-sort").onchange = () => { MC.sort = $("m-sort").value; saveMC(); renderMats() };
   $("m-kind").value = MC.kind; $("m-kind").onchange = () => { MC.kind = $("m-kind").value; saveMC(); renderMats() };
   $("m-art").checked = MC.art; $("m-art").onchange = () => { MC.art = $("m-art").checked; saveMC(); renderMats() };
   const one = (el, items, key) => {
@@ -1140,13 +1148,13 @@ function setupMats() {
   $("m-clear").onclick = () => { MC.prices = {}; MC.dates = {}; saveMC(); setupMats(); renderMats() };
 }
 
+const sellLoc = () => MC.sell || MC.city;
 function matsItems() {
-  const out = [];
+  const out = [], words = (MC.q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
   for (const e of DB.list) {
-    const k = e.it.k;
-    if (!k) continue;
-    const ok = MC.kind === "weapons" ? WEAPON_K.has(k) : MC.kind === "offhand" ? k === "offhand" : MC.kind === "armor" ? ARMOR_K.test(k) : WEAPON_K.has(k) || k === "offhand" || ARMOR_K.test(k);
-    if (!ok || (MC.tier && e.it.t !== +MC.tier)) continue;
+    const k = e.it.k || "", weapon = WEAPON_K.has(k) || e.it.c === "weapons";
+    const ok = MC.kind === "weapons" ? weapon : MC.kind === "offhand" ? k === "offhand" : MC.kind === "armor" ? ARMOR_K.test(k) : weapon || k === "offhand" || ARMOR_K.test(k);
+    if (!ok || (MC.tier && e.it.t !== +MC.tier) || !words.every(w => e.hay.includes(w))) continue;
     for (const l of Object.keys(e.it.r)) if (!MC.ench || l === MC.ench) out.push({ e, l });
   }
   return out;
@@ -1181,28 +1189,47 @@ function renderMats() {
     const recs = e.it.r[l];
     const hasArt = recs.some(r => r.m.some(m => !MAT_RE.test(m[0])));
     if (hasArt && !MC.art) continue;
-    const costs = recs.map(r => ({ r, c: matCost(e.id, l, r) })).filter(x => !x.c.missingMat);
-    if (!costs.length) continue;
+    const all = recs.map(r => ({ r, c: matCost(e.id, l, r) })), costs = all.filter(x => !x.c.missingMat);
+    // Keep items with a missing material price in the list, so nothing disappears without saying why.
+    if (!costs.length) { rows.push({ e, l, best: all[0], recs, missing: all[0].c.missingMat }); continue }
     const best = costs.reduce((a, b) => (b.c.total ?? Infinity) < (a.c.total ?? Infinity) ? b : a);
-    rows.push({ e, l, best, recs });
+    // Profit vs the cheapest sell order (or the black market's buy order), after tax and the listing fee.
+    const sale = saleOf(priceId(e.id, l), sellLoc());
+    const profit = sale && best.c.total != null ? sale.net - best.c.total : null;
+    rows.push({ e, l, best, recs, sale, profit, margin: profit != null && best.c.total > 0 ? profit / best.c.total : null });
   }
   const filled = Object.keys(MC.prices).length;
   if (!filled) { out.innerHTML = '<p class="empty">Type in some material prices above, or press "Fill empty boxes from the market".</p>'; $("m-note").textContent = "Prices are per unit. Leave a box empty to skip items that need it."; return }
-  rows.sort((a, b) => a.e.it.k.localeCompare(b.e.it.k) || a.e.it.t - b.e.it.t || a.l - b.l || a.e.name.localeCompare(b.e.name));
-  const noArt = rows.filter(r => r.best.c.art && r.best.c.total == null).length;
-  $("m-note").textContent = `${rows.length.toLocaleString("en-US")} items can be priced with the materials you filled in.${noArt ? ` ${noArt} need an artifact with no price in ${MC.city} yet; press Fill to load artifact prices.` : ""} Real cost = materials × (1 − return rate) + artifact + station fee.`;
-  let html = `<table><thead><tr><th>Item</th><th>Materials</th><th class="num">Return rate</th><th class="num">Materials after return</th><th>Artifact</th><th class="num">Station fee</th><th class="num">Cost each</th></tr></thead><tbody>`;
+  const grp = r => r.e.it.k || r.e.it.s;
+  const byType = (a, b) => grp(a).localeCompare(grp(b)) || a.e.it.t - b.e.it.t || a.l - b.l || a.e.name.localeCompare(b.e.name);
+  const val = r => MC.sort === "profit" ? r.profit : MC.sort === "margin" ? r.margin : MC.sort === "cost" ? -(r.best.c.total ?? Infinity) : null;
+  rows.sort(MC.sort === "type" ? byType : (a, b) => (val(b) ?? -Infinity) - (val(a) ?? -Infinity) || byType(a, b));
+  const noArt = rows.filter(r => !r.missing && r.best.c.art && r.best.c.total == null).length;
+  $("m-note").textContent = `${rows.filter(r => !r.missing).length.toLocaleString("en-US")} items can be priced with the materials you filled in.${noArt ? ` ${noArt} need an artifact with no price in ${MC.city} yet; press Fill to load artifact prices.` : ""} Real cost = materials × (1 − return rate) + artifact + station fee.`;
+  const priced = rows.filter(r => r.profit != null), good = priced.filter(r => r.margin >= 0.2).length, gaps = rows.filter(r => r.missing).length;
+  if (gaps) $("m-note").textContent += ` ${gaps} need a material price that's still empty (shown in red).`;
+  if (priced.length) $("m-note").textContent += ` ${priced.length} have a sell price in ${sellLoc()}; ${good} make 20% or more.`;
+  else if (rows.length) $("m-note").textContent += ` Press "Fill empty boxes and load sell prices" to compare with what they sell for in ${sellLoc()}.`;
+  const LIMIT = 2000;
+  let html = `<table><thead><tr><th>Item</th><th>Materials</th><th class="num">Return rate</th><th class="num">Materials after return</th><th>Artifact</th><th class="num">Station fee</th><th class="num">Cost each</th><th class="num">${isBM(sellLoc()) ? "BM pays" : "Sells for"}</th><th class="num">Profit each</th></tr></thead><tbody>`;
   let lastK = null;
-  for (const { e, l, best } of rows.slice(0, 600)) {
-    const c = best.c, r = best.r, pid = priceId(e.id, l);
-    if (e.it.k !== lastK) { html += `<tr class="group"><td colspan="7">${esc(pretty(e.it.k))}</td></tr>`; lastK = e.it.k }
+  for (const { e, l, best, sale, profit, margin, missing } of rows.slice(0, LIMIT)) {
+    const c = best.c, r = best.r, pid = priceId(e.id, l), g = e.it.k || e.it.s, a = sale && ageText(sale.d);
+    if (MC.sort === "type" && g !== lastK) { html += `<tr class="group"><td colspan="9">${esc(pretty(g))}</td></tr>`; lastK = g }
+    if (missing) {
+      html += `<tr data-open="${e.id}" data-l="${l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(e.name)}<span class="age">T${e.it.t}.${l}</span></div></div></td>
+        <td colspan="8" class="old">Needs a price for ${esc(nameOf(missing))} (T${MAT_RE.exec(missing)[1]}.${MAT_RE.exec(missing)[3] || 0}). Nobody sells it in ${esc(MC.city)} right now; type in what you'd pay.</td></tr>`;
+      continue;
+    }
     const mats = r.m.filter(m => MAT_RE.test(m[0])).map(([m, n]) => `${n} ${MAT_TYPES.find(x => x[0] === MAT_RE.exec(m)[2])[1].toLowerCase()}`).join(" + ");
     html += `<tr data-open="${e.id}" data-l="${l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(e.name)}<span class="age">T${e.it.t}.${l}${r.n > 1 ? " · makes " + r.n : ""}</span></div></div></td>
       <td>${mats}</td><td class="num">${Math.round(c.rr * 1000) / 10}%</td><td class="num">${fmt(c.mats)}</td>
       <td>${c.art ? `${esc(nameOf(c.art.id))}${c.art.cnt > 1 ? " ×" + c.art.cnt : ""}<span class="age">${c.artCost != null ? fmt(c.artCost) + (c.art.d ? " · " + ageText(c.art.d).text : "") : "no price yet"}</span>` : "—"}</td>
-      <td class="num">${c.fee ? fmt(c.fee) : "—"}</td><td class="num"><b>${c.total != null ? fmt(c.total) : "—"}</b></td></tr>`;
+      <td class="num">${c.fee ? fmt(c.fee) : "—"}</td><td class="num"><b>${c.total != null ? fmt(c.total) : "—"}</b></td>
+      <td class="num">${sale ? fmt(sale.v) + `<span class="age ${a && a.old ? "old" : ""}">${a ? a.text : ""}</span>` : "—"}</td>
+      <td class="num">${profit != null ? signed(profit) + `<span class="age">${pct(margin)} ${verdict(margin).replace(/<[^>]+>/g, "")}</span>` : "—"}</td></tr>`;
   }
-  html += `</tbody></table>${rows.length > 600 ? '<p class="note" style="padding:0 12px 12px">Showing the first 600; pick a tier or enchantment to narrow it down.</p>' : ""}`;
+  html += `</tbody></table><p class="note" style="padding:0 12px 12px">Profit = what you keep after ${S.premium ? "4%" : "8%"} tax${isBM(sellLoc()) ? "" : " and the 2.5% listing fee"} minus the cost each. Sells for is the cheapest sell order${isBM(sellLoc()) ? " (the black market's normal-quality buy order)" : ""} at normal or good quality, so check it isn't a troll listing before a big batch.${rows.length > LIMIT ? ` Showing the first ${LIMIT}; search or pick a tier to narrow it down.` : ""}</p>`;
   out.innerHTML = html;
   out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
 }
@@ -1215,7 +1242,10 @@ async function fillMats(replace) {
   for (const { e, l } of matsItems()) e.it.r[l].forEach(r => r.m.forEach(m => { if (!MAT_RE.test(m[0])) arts.add(m[0]) }));
   $("m-fill").disabled = $("m-fillall").disabled = true;
   try {
-    await fetchPrices([...ids, ...arts], [MC.city], (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${MC.city} prices… ${i} of ${t}`, { persist: false, qualities: "1" });
+    const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
+    await fetchPrices([...ids, ...arts], [MC.city], step(MC.city + " material prices"), { persist: false, qualities: "1" });
+    const products = [...new Set(matsItems().map(({ e, l }) => priceId(e.id, l)))];
+    await fetchPrices(products, [sellLoc()], step(sellLoc() + " sell prices"), { persist: false, qualities: "1,2" });
     let filled = 0;
     for (const id of ids) {
       const p = getPrice(MC.city, id);
