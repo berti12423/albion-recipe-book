@@ -611,7 +611,7 @@ function craftParts(id, lvl, ml, o) {
   const u = recs[0].u;
   if (u && lvl !== "0") {
     const prev = buyOf(ml, priceId(id, String(lvl - 1)), o), rune = buyOf(ml, u[0], o);
-    parts.push({ label: `Buy a normal-quality .${lvl - 1} and enchant it (${u[1]} ${nameOf(u[0])}; better qualities need more)`, fixed: prev != null && rune != null ? prev + rune * u[1] : null, upgrade: true, missing: prev == null || rune == null });
+    parts.push({ label: `Buy the .${lvl - 1} and enchant it (${u[1]} ${nameOf(u[0])})`, fixed: prev != null && rune != null ? prev + rune * u[1] : null, upgrade: true, missing: prev == null || rune == null });
   }
   return parts;
 }
