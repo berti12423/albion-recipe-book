@@ -737,7 +737,10 @@ function profitHtml() {
   if (h) html += h.vol ? `<li>About <b class="mono">${fmt(h.vol)}</b> sell per day in ${esc(cityEl.value)} (28-day average, all qualities). Craft <b class="mono">${fmt(Math.max(1, h.vol * 0.2))}–${fmt(Math.max(1, h.vol * 0.3))}</b> at a time (20–30% of daily sales) so they sell in a day or two.</li>`
     : `<li class="old">No recorded sales in ${esc(cityEl.value)} over the last 28 days. Craft one or two to test before making a batch.</li>`;
   if (!e.best) html += `<li class="old">Some material prices are missing in ${esc(matLoc())}, so the cost can't be worked out. Nobody may be selling them there right now.</li>`;
-  if (!isBM() && h && h.avg && sale && sale.v > 2 * h.avg) html += `<li class="old">The price is more than double the 28-day average (${fmt(h.avg)}). It may be a troll listing; don't count on it.</li>`;
+  const real = realSale(sale, h, cityEl.value);
+  if (real && real.flag === "troll" && e.best) html += `<li class="old"><b>Likely troll price:</b> it's listed for more than double what it really sold for over 28 days (${fmt(h.avg)}). At that price you'd make <b class="mono">${signed(real.net - e.best.cost)}</b> each, not ${signed(e.profit)}.</li>`;
+  else if (real && real.flag === "avg" && e.best) html += `<li>It's listed above its 28-day average sale price (${fmt(h.avg)}). Counting at the average, profit is <b class="mono">${signed(real.net - e.best.cost)}</b> each.</li>`;
+  else if (real && real.flag === "nosales") html += `<li class="old">Nobody bought one in ${esc(cityEl.value)} over the last 28 days, so this price may never sell.</li>`;
   if (age && age.old) html += `<li class="old">This price is over a day old. Check it in game before you buy materials.</li>`;
   if (e.margin != null && e.margin > 0 && e.margin < 0.2) html += `<li>Under 20% leaves little room if you have to relist (another 2.5% each time).</li>`;
   html += `<li>Check the profit at the lowest quality; anything better is a bonus. Journals, salads and spec aren't counted.</li></ul></section>`;
@@ -873,19 +876,37 @@ async function fetchPrices(ids, locs, onStep, { persist = true, qualities = "" }
 
 // Daily sales over the last 28 days, summed across qualities, plus the average price for spotting troll listings.
 async function fetchHistory(ids, loc) {
+  const locs = [].concat(loc);
   let res;
   for (let tries = 0; ; tries++) {
-    res = await fetch(AODP_HISTORY + ids.map(encodeURIComponent).join(",") + ".json?locations=" + encodeURIComponent(loc) + "&time-scale=24");
+    res = await fetch(AODP_HISTORY + ids.map(encodeURIComponent).join(",") + ".json?locations=" + locs.map(encodeURIComponent).join(",") + "&time-scale=24");
     if (res.status !== 429 || tries === 2) break;
     await new Promise(r => setTimeout(r, 20000));
   }
   if (!res.ok) return;
   const since = Date.now() - 28 * 864e5, acc = {};
   for (const r of await res.json()) {
-    const a = acc[r.item_id] ??= { n: 0, sum: 0 };
-    for (const d of r.data) if (new Date(d.timestamp + "Z").getTime() >= since) { a.n += d.item_count; a.sum += d.item_count * d.avg_price }
+    // Volume counts every quality; the average price only normal and good, the quality a fresh craft is priced at.
+    // Otherwise a few masterpiece sales make an ordinary listing look cheap.
+    const a = acc[r.location + "|" + r.item_id] ??= { n: 0, sum: 0, ln: 0, lsum: 0 };
+    for (const d of r.data) if (new Date(d.timestamp + "Z").getTime() >= since) {
+      a.n += d.item_count; a.sum += d.item_count * d.avg_price;
+      if (r.quality <= 2) { a.ln += d.item_count; a.lsum += d.item_count * d.avg_price }
+    }
   }
-  for (const id of ids) { const a = acc[id]; store.set("h:" + loc + "|" + id, { vol: a ? a.n / 28 : 0, avg: a && a.n ? a.sum / a.n : null, t: Date.now() }) }
+  for (const l of locs) for (const id of ids) { const a = acc[l + "|" + id]; store.set("h:" + l + "|" + id, { vol: a ? a.n / 28 : 0, avg: a && a.ln ? a.lsum / a.ln : a && a.n ? a.sum / a.n : null, lq: 1, t: Date.now() }) }
+}
+
+function realSale(sale, h, loc) {
+  if (h && h.lq !== 1) h = null; // saved before the average used normal and good quality only
+  if (!sale || isBM(loc)) return sale && { ...sale, flag: null };
+  if (!h) return { ...sale, flag: "unchecked" };
+  if (!h.vol) return { ...sale, flag: "nosales" };
+  if (h.avg && sale.v > h.avg) {
+    const v = h.avg;
+    return { ...sale, listed: sale.v, v, net: v * (sale.net / sale.v), flag: sale.v > 2 * h.avg ? "troll" : "avg" };
+  }
+  return { ...sale, flag: null };
 }
 
 // Compare all cities: buy, craft and sell in each city on its own (the black market buys from Caerleon crafts),
@@ -893,30 +914,43 @@ async function fetchHistory(ids, loc) {
 const CMP = new Map();
 const cmpKey = () => current + "|" + level;
 function cityResult(city) {
-  const buy = isBM(city) ? "Caerleon" : city, rr = returnRate(current, buy);
-  const best = cheapest(craftParts(current, level, buy, CARD_MODE), rr), sale = saleOf(priceId(current, level), city);
-  const profit = best && sale ? sale.net - best.cost : null;
-  return { city, rr, best, sale, profit, margin: profit != null && best.cost > 0 ? profit / best.cost : null };
+  const buy = isBM(city) ? "Caerleon" : city, rr = returnRate(current, buy), pid = priceId(current, level);
+  const best = cheapest(craftParts(current, level, buy, CARD_MODE), rr);
+  const sale = realSale(saleOf(pid, city), store.get("h:" + city + "|" + pid), city);
+  // Troll listings and items nobody buys don't count as a profit.
+  const usable = sale && sale.flag !== "troll" && sale.flag !== "nosales";
+  const profit = best && usable ? sale.net - best.cost : null;
+  return { city, rr, best, sale, usable, checked: sale && sale.flag !== "unchecked", profit, margin: profit != null && best.cost > 0 ? profit / best.cost : null };
 }
 function compareHtml() {
   const t = CMP.get(cmpKey());
   let html = `<section class="profit" aria-label="Compare cities"><h3>Compare all cities</h3>`;
   if (!t) return html + `<p class="note" style="margin-top:0">See what this costs to make and sells for in every royal city, Caerleon, Brecilien and the Black Market, and the most profitable route.</p><button class="primary" id="cmp-go">Compare all cities</button></section>`;
   const rows = [...CITIES, "Black Market"].map(cityResult);
-  const top = rows.filter(r => r.profit != null).reduce((a, b) => !a || b.profit > a.profit ? b : a, null);
-  const route = bestRoute(current, level, CITIES, [...CITIES, "Black Market"], CARD_MODE);
+  // Prefer prices that were checked against real sales; fall back to unchecked ones only when nothing was checked.
+  const anyChecked = rows.some(r => r.usable && r.checked);
+  const counts = r => r.usable && (r.checked || !anyChecked);
+  const top = rows.filter(r => r.profit != null && counts(r)).reduce((a, b) => !a || b.profit > a.profit ? b : a, null);
+  // Best route over the checked prices: the cheapest city to make it in, and the best real sale anywhere.
+  const maker = rows.filter(r => r.best && !isBM(r.city)).reduce((a, b) => !a || b.best.cost < a.best.cost ? b : a, null);
+  const seller = rows.filter(counts).reduce((a, b) => !a || b.sale.net > a.sale.net ? b : a, null);
+  const route = maker && seller ? { buyLoc: maker.city, craftLoc: maker.city, rr: maker.rr, sellLoc: seller.city, profit: seller.sale.net - maker.best.cost, margin: (seller.sale.net - maker.best.cost) / maker.best.cost } : null;
   html += `<div class="tablewrap"><table><thead><tr><th>City</th><th class="num">Return rate</th><th class="num">Cost to make</th><th class="num">Sells for</th><th class="num">Profit each</th></tr></thead><tbody>
     ${rows.map(r => { const a = r.sale && ageText(r.sale.d); return `<tr${r === top ? ' class="best"' : ""}><td>${esc(r.city)}${r === top ? ' <span class="pill good">best</span>' : ""}${RED.has(r.city) ? '<span class="age old">red-zone trip</span>' : ""}${isBM(r.city) ? '<span class="age">materials from Caerleon</span>' : ""}</td>
       <td class="num">${Math.round(r.rr * 1000) / 10}%${cityBonus(current, isBM(r.city) ? "Caerleon" : r.city) && S.rr === "auto" ? '<span class="age">city bonus</span>' : ""}</td>
       <td class="num">${r.best ? fmt(r.best.cost) : "—"}${r.best && r.best.upgrade ? '<span class="age">enchant the .' + (level - 1) + "</span>" : ""}</td>
-      <td class="num">${r.sale ? fmt(r.sale.v) + `<span class="age ${a && a.old ? "old" : ""}">${a ? a.text : ""}</span>` : "—"}</td>
-      <td class="num">${r.profit != null ? signed(r.profit) + `<span class="age">${pct(r.margin)}</span>` : "—"}</td></tr>` }).join("")}
+      <td class="num">${!r.sale ? "—" : r.sale.flag === "troll" ? `<s>${fmt(r.sale.listed)}</s><span class="age old">likely troll price: usually sells for ${fmt(r.sale.v)}</span>`
+        : r.sale.flag === "nosales" ? `${fmt(r.sale.v)}<span class="age old">nobody bought one in 28 days</span>`
+        : r.sale.flag === "avg" ? `${fmt(r.sale.v)}<span class="age">28-day average (listed ${fmt(r.sale.listed)})</span>`
+        : r.sale.flag === "unchecked" ? `${fmt(r.sale.v)}<span class="age old">not checked against sales${anyChecked ? ", left out" : ""}</span>`
+        : fmt(r.sale.v) + `<span class="age ${a && a.old ? "old" : ""}">${a ? a.text : ""}</span>`}</td>
+      <td class="num">${r.profit != null ? signed(r.profit) + `<span class="age">${pct(r.margin)}</span>` : r.sale && !r.usable ? '<span class="age">not counted</span>' : "—"}</td></tr>` }).join("")}
     </tbody></table></div>`;
   if (route && route.profit > (top ? top.profit : -Infinity) + 1 && (route.buyLoc !== route.sellLoc))
     html += `<p><b>Best route:</b> buy the materials in <b>${esc(route.buyLoc)}</b>, craft in <b>${esc(route.craftLoc)}</b> (${Math.round(route.rr * 1000) / 10}% back) and sell in <b>${esc(route.sellLoc)}</b> for <b class="mono">${signed(route.profit)}</b> each (${pct(route.margin)}). Transport isn't counted.</p>`;
   else if (top) html += `<p><b>Best:</b> buy, craft and sell in <b>${esc(top.city)}</b> for <b class="mono">${signed(top.profit)}</b> each. Moving goods between cities doesn't beat that right now.</p>`;
   else html += `<p class="note">No city has prices for both the materials and the item right now.</p>`;
-  html += `<p class="note">Each row buys the materials in that city at the cheapest sell order and sells with a sell order there (the Black Market: into its buy order), using your return rate and fee settings. A dash means nobody has the item or one of its materials listed in that city right now. Prices loaded ${Math.max(1, Math.round((Date.now() - t) / 6e4))} min ago. <button class="link" id="cmp-go">Refresh</button></p></section>`;
+  html += `<p class="note">Each row buys the materials in that city at the cheapest sell order and sells with a sell order there (the Black Market: into its buy order), using your return rate and fee settings. Sale prices are checked against 28 days of real sales in each city: a listing above the average counts at the average, and likely troll prices (over double the usual) or items nobody bought are left out. A dash means nobody has the item or one of its materials listed in that city right now. Prices loaded ${Math.max(1, Math.round((Date.now() - t) / 6e4))} min ago. <button class="link" id="cmp-go">Refresh</button></p></section>`;
   return html;
 }
 async function loadCompare() {
@@ -927,6 +961,8 @@ async function loadCompare() {
   const btn = $("cmp-go"); if (btn) { btn.disabled = true; btn.textContent = "Loading every city…" }
   try {
     await fetchPrices([...ids], [...CITIES, "Black Market"], (i, t, wait) => { if (wait && btn) btn.textContent = "The price server asked us to slow down. Waiting…" }, { persist: false });
+    if (btn) btn.textContent = "Checking real sales…";
+    await fetchHistory([pid], CITIES).catch(() => {});
     CMP.set(cmpKey(), Date.now());
   } catch (e) {
     note(e instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : e.message, true);
@@ -948,7 +984,7 @@ async function loadPrices(force) {
   try {
     const best = await fetchPrices([...new Set(ids)], locs);
     const h = store.get("h:" + city + "|" + pid);
-    if (force || !h || Date.now() - h.t > 60 * 60 * 1000) await fetchHistory([pid], city).catch(() => {});
+    if (force || !h || h.lq !== 1 || Date.now() - h.t > 60 * 60 * 1000) await fetchHistory([pid], city).catch(() => {});
     store.set("f:" + key, Date.now());
     if (mine !== loading) return;
     renderCard();
@@ -1065,7 +1101,7 @@ async function runScan() {
     // Check the top of the list against 28 days of real sales: troll listings and items nobody buys drop out, the next
     // ones move up and get checked too.
     for (let round = 0; round < 10; round++) {
-      const fresh = r => r.h && Date.now() - r.h.t < 36e5;
+      const fresh = r => r.h && r.h.lq === 1 && Date.now() - r.h.t < 36e5;
       const pick = k => finderResults(k, true).filter(r => r.e.profit > 0).slice(0, 40).filter(r => !fresh(r));
       const unchecked = [...new Map([...pick("profit"), ...pick(F.sort)].map(r => [r.id + r.l + r.e.sellLoc, r])).values()];
       if (!unchecked.length) break;
