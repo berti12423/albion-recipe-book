@@ -763,6 +763,7 @@ function renderCard() {
       </tbody></table></div></div>`;
   });
   html += profitHtml();
+  html += compareHtml();
   html += `<div class="prices"><button class="primary" id="load">Refresh prices</button>
     <p class="note" id="note">Material prices are the cheapest sell order in ${esc(matLoc())} at any quality. Live from the Albion Online Data Project, refreshed when you open an item (at most every 10 minutes).</p></div>`;
   card.innerHTML = html;
@@ -770,6 +771,7 @@ function renderCard() {
   card.querySelectorAll(".ench button").forEach(b => b.onclick = () => { level = b.dataset.l; renderCard() });
   card.querySelectorAll("[data-open]").forEach(b => b.onclick = () => open(b.dataset.open, true));
   $("load").onclick = () => loadPrices(true);
+  $("cmp-go").onclick = loadCompare;
   loadPrices(false);
 }
 
@@ -884,6 +886,52 @@ async function fetchHistory(ids, loc) {
     for (const d of r.data) if (new Date(d.timestamp + "Z").getTime() >= since) { a.n += d.item_count; a.sum += d.item_count * d.avg_price }
   }
   for (const id of ids) { const a = acc[id]; store.set("h:" + loc + "|" + id, { vol: a ? a.n / 28 : 0, avg: a && a.n ? a.sum / a.n : null, t: Date.now() }) }
+}
+
+// Compare all cities: buy, craft and sell in each city on its own (the black market buys from Caerleon crafts),
+// plus the best route that buys in one city and sells in another.
+const CMP = new Map();
+const cmpKey = () => current + "|" + level;
+function cityResult(city) {
+  const buy = isBM(city) ? "Caerleon" : city, rr = returnRate(current, buy);
+  const best = cheapest(craftParts(current, level, buy, CARD_MODE), rr), sale = saleOf(priceId(current, level), city);
+  const profit = best && sale ? sale.net - best.cost : null;
+  return { city, rr, best, sale, profit, margin: profit != null && best.cost > 0 ? profit / best.cost : null };
+}
+function compareHtml() {
+  const t = CMP.get(cmpKey());
+  let html = `<section class="profit" aria-label="Compare cities"><h3>Compare all cities</h3>`;
+  if (!t) return html + `<p class="note" style="margin-top:0">See what this costs to make and sells for in every royal city, Caerleon, Brecilien and the Black Market, and the most profitable route.</p><button class="primary" id="cmp-go">Compare all cities</button></section>`;
+  const rows = [...CITIES, "Black Market"].map(cityResult);
+  const top = rows.filter(r => r.profit != null).reduce((a, b) => !a || b.profit > a.profit ? b : a, null);
+  const route = bestRoute(current, level, CITIES, [...CITIES, "Black Market"], CARD_MODE);
+  html += `<div class="tablewrap"><table><thead><tr><th>City</th><th class="num">Return rate</th><th class="num">Cost to make</th><th class="num">Sells for</th><th class="num">Profit each</th></tr></thead><tbody>
+    ${rows.map(r => { const a = r.sale && ageText(r.sale.d); return `<tr${r === top ? ' class="best"' : ""}><td>${esc(r.city)}${r === top ? ' <span class="pill good">best</span>' : ""}${RED.has(r.city) ? '<span class="age old">red-zone trip</span>' : ""}${isBM(r.city) ? '<span class="age">materials from Caerleon</span>' : ""}</td>
+      <td class="num">${Math.round(r.rr * 1000) / 10}%${cityBonus(current, isBM(r.city) ? "Caerleon" : r.city) && S.rr === "auto" ? '<span class="age">city bonus</span>' : ""}</td>
+      <td class="num">${r.best ? fmt(r.best.cost) : "—"}${r.best && r.best.upgrade ? '<span class="age">enchant the .' + (level - 1) + "</span>" : ""}</td>
+      <td class="num">${r.sale ? fmt(r.sale.v) + `<span class="age ${a && a.old ? "old" : ""}">${a ? a.text : ""}</span>` : "—"}</td>
+      <td class="num">${r.profit != null ? signed(r.profit) + `<span class="age">${pct(r.margin)}</span>` : "—"}</td></tr>` }).join("")}
+    </tbody></table></div>`;
+  if (route && route.profit > (top ? top.profit : -Infinity) + 1 && (route.buyLoc !== route.sellLoc))
+    html += `<p><b>Best route:</b> buy the materials in <b>${esc(route.buyLoc)}</b>, craft in <b>${esc(route.craftLoc)}</b> (${Math.round(route.rr * 1000) / 10}% back) and sell in <b>${esc(route.sellLoc)}</b> for <b class="mono">${signed(route.profit)}</b> each (${pct(route.margin)}). Transport isn't counted.</p>`;
+  else if (top) html += `<p><b>Best:</b> buy, craft and sell in <b>${esc(top.city)}</b> for <b class="mono">${signed(top.profit)}</b> each. Moving goods between cities doesn't beat that right now.</p>`;
+  else html += `<p class="note">No city has prices for both the materials and the item right now.</p>`;
+  html += `<p class="note">Each row buys the materials in that city at the cheapest sell order and sells with a sell order there (the Black Market: into its buy order), using your return rate and fee settings. A dash means nobody has the item or one of its materials listed in that city right now. Prices loaded ${Math.max(1, Math.round((Date.now() - t) / 6e4))} min ago. <button class="link" id="cmp-go">Refresh</button></p></section>`;
+  return html;
+}
+async function loadCompare() {
+  const recs = DB.items[current].r[level], pid = priceId(current, level);
+  const ids = new Set([pid]);
+  recs.forEach(r => r.m.forEach(m => ids.add(m[0])));
+  if (recs[0].u && level !== "0") { ids.add(priceId(current, String(level - 1))); ids.add(recs[0].u[0]) }
+  const btn = $("cmp-go"); if (btn) { btn.disabled = true; btn.textContent = "Loading every city…" }
+  try {
+    await fetchPrices([...ids], [...CITIES, "Black Market"], (i, t, wait) => { if (wait && btn) btn.textContent = "The price server asked us to slow down. Waiting…" }, { persist: false });
+    CMP.set(cmpKey(), Date.now());
+  } catch (e) {
+    note(e instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : e.message, true);
+  }
+  renderCard();
 }
 
 let loading = 0;
