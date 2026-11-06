@@ -683,9 +683,11 @@ async function boot() {
   setupMats();
   if (view === "mats") renderMats();
   [...tiers].sort((a, b) => a - b).forEach(t => $("tier").add(new Option("Tier " + t, t)));
-  const start = location.hash.slice(1);
+  const [start, startLevel] = location.hash.slice(1).split("@");
   renderList();
+  if (DB.items[start] && startLevel && DB.items[start].r[startLevel]) level = startLevel;
   open(DB.items[start] ? start : (store.get("last") && DB.items[store.get("last")] ? store.get("last") : "T4_HEAD_LEATHER_HELL"));
+  booted = true;
 }
 
 function renderList() {
@@ -708,10 +710,30 @@ function renderList() {
   if (!shown.length) list.innerHTML = '<p class="empty">No craftable item matches. Try fewer words.</p>';
 }
 
-function open(id, scroll) {
+// Browser history: every tab switch, opened recipe and enchantment is its own entry, so Back and Forward work.
+// Several changes from one click (switch to Recipes, then open an item) collapse into a single entry.
+let booted = false, navBusy = false;
+const cardHash = () => current + (level !== "0" ? "@" + level : "");
+function nav(hash) {
+  if (!hash || location.hash.slice(1) === hash) return;
+  try { history[booted && !navBusy ? "pushState" : "replaceState"](null, "", "#" + hash) } catch {}
+  if (booted && !navBusy) { navBusy = true; queueMicrotask(() => navBusy = false) }
+}
+// Restore the page for a hash: a tab name, or a recipe id with an optional @enchantment.
+function route(h) {
+  if (PATHS[h] || ["finder", "guide", "mats"].includes(h)) return show(h, true);
+  const [id, l] = h.split("@");
+  if (!DB || !DB.items[id]) return;
+  level = l && DB.items[id].r[l] ? l : "0";
+  show("recipes", true);
+  open(id, false, true);
+}
+addEventListener("popstate", () => route(location.hash.slice(1)));
+
+function open(id, scroll, fromHistory) {
   current = id; level = DB.items[id].r[level] ? level : "0";
   store.set("last", id);
-  if (view === "recipes") try { history.replaceState(null, "", "#" + id) } catch {}
+  if (view === "recipes" && !fromHistory) nav(cardHash());
   document.querySelectorAll(".row").forEach(r => r.dataset.id === id ? r.setAttribute("aria-current", "true") : r.removeAttribute("aria-current"));
   renderCard();
   if (scroll && matchMedia("(max-width: 760px)").matches) $("card").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -773,7 +795,7 @@ function renderCard() {
     <p class="note" id="note">Material prices are the cheapest sell order in ${esc(matLoc())} at any quality. Live from the Albion Online Data Project, refreshed when you open an item (at most every 10 minutes).</p></div>`;
   card.innerHTML = html;
   card.querySelector("h2").textContent = nameOf(current) + (level !== "0" ? " ." + level : "");
-  card.querySelectorAll(".ench button").forEach(b => b.onclick = () => { level = b.dataset.l; renderCard() });
+  card.querySelectorAll(".ench button").forEach(b => b.onclick = () => { level = b.dataset.l; renderCard(); nav(cardHash()) });
   card.querySelectorAll("[data-open]").forEach(b => b.onclick = () => open(b.dataset.open, true));
   $("load").onclick = () => loadPrices(true);
   $("cmp-go").onclick = loadCompare;
@@ -1517,7 +1539,7 @@ function goalOut() {
   out.innerHTML = `<b>${Math.floor(100 * have / ISLAND_COST)}%</b> of the island saved. <b>${fmt(left)}</b> to go` + (daily ? `, about <b>${Math.ceil(left / daily)} days</b> at ${fmt(daily)} a day.` : ".");
 }
 
-function show(v) {
+function show(v, fromHistory) {
   view = v;
   for (const k of ["recipes", "finder", "mats", "guide", "crafting", "island"]) {
     $("view-" + k).hidden = k !== v;
@@ -1526,8 +1548,7 @@ function show(v) {
   $("settings").hidden = !(v === "recipes" || v === "finder" || v === "mats");
   if (v === "mats" && DB) renderMats();
   if (PATHS[v]) renderPath(v);
-  const hash = v === "recipes" ? current : v;
-  if (hash) try { history.replaceState(null, "", "#" + hash) } catch {}
+  if (!fromHistory) nav(v === "recipes" ? (current ? cardHash() : "") : v);
   store.set("view", v);
 }
 document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => show(b.dataset.view));
@@ -1540,7 +1561,7 @@ $("g-bonus").innerHTML = `<table><thead><tr><th>City</th><th>Crafting +15%</th><
 }).join("")}</tbody></table>`;
 {
   const h = location.hash.slice(1);
-  show(PATHS[h] || ["finder", "guide", "mats"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")));
+  show(PATHS[h] || ["finder", "guide", "mats"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")), !!h);
 }
 
 boot().catch(() => { $("card").innerHTML = '<p class="empty">The recipe list didn\'t load. Reload the page to try again.</p>' });
