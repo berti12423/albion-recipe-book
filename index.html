@@ -527,6 +527,8 @@ cityEl.value = store.get("city") || "Fort Sterling";
 
 const pretty = s => (s || "other").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 const nameOf = id => DB.names[id.split("@")[0]] || pretty(id.split("@")[0].replace(/^T\d_/, ""));
+// The item name without its tier word ("Adept's Holy Staff" -> "Holy Staff"), so one item's tiers sort together.
+const baseName = n => n.replace(/^(Beginner|Novice|Journeyman|Adept|Expert|Master|Grandmaster|Elder)'s /, "");
 const fmt = n => n == null ? "—" : Math.round(n).toLocaleString("en-US");
 const priceId = (id, lvl) => lvl === "0" ? id : id + "@" + lvl;
 const icon = (id, px) => `<img class="ico" src="https://render.albiononline.com/v1/item/${encodeURIComponent(id)}.png?size=${px * 2}&quality=1" width="${px}" height="${px}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">`;
@@ -674,7 +676,7 @@ async function boot() {
     cats.set(label, pretty(it.c) + " · " + pretty(it.s));
     if (it.t) tiers.add(it.t);
     return { id, it, name: nameOf(id), hay: (nameOf(id) + " " + id + " " + it.s).toLowerCase() };
-  }).sort((a, b) => a.name.localeCompare(b.name) || a.it.t - b.it.t);
+  }).sort((a, b) => baseName(a.name).localeCompare(baseName(b.name)) || a.it.t - b.it.t || a.name.localeCompare(b.name));
   [...cats].sort((a, b) => a[1].localeCompare(b[1])).forEach(([v, t]) => $("cat").add(new Option(t, v)));
   setupSettings();
   setupFinder();
