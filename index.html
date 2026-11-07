@@ -679,16 +679,40 @@ function buyOf(loc, id, o = CARD_MODE) {
 
 // Every way to get one item of this tier and enchantment, with materials bought in market ml: each recipe, plus buying
 // the enchantment below and enchanting it. Returns the parts so the cost can be redone for any return rate.
+// What it costs to make one of an ingredient yourself in market ml (an artifact from runes or crystal shards, the
+// plain cape inside a faction cape, ...), using its own cheapest recipe. One level deep only.
+function ingredientCost(mid, ml, o) {
+  const [base, lv] = mid.split("@"), it = DB.items[base], recs = it && it.r[lv || "0"];
+  if (!recs) return null;
+  const rr = returnRate(base, ml);
+  let best = null;
+  for (const r of recs) {
+    let back = 0, gone = 0, ok = true;
+    for (const [x, c, a] of r.m) { const p = buyOf(ml, x, o); if (p == null) { ok = false; break } if (a) gone += p * c; else back += p * c }
+    if (ok) { const c = (back * (1 - rr) + gone + stationFee(r)) / r.n; if (best == null || c < best) best = c }
+  }
+  return best;
+}
+// The ids whose prices are needed to make an ingredient yourself.
+function ingredientInputs(mid) {
+  const [base, lv] = mid.split("@"), it = DB.items[base];
+  return it && it.r[lv || "0"] ? it.r[lv || "0"].flatMap(r => r.m.map(m => m[0])) : [];
+}
+const withInputs = ids => [...new Set([...ids].flatMap(id => [id, ...ingredientInputs(id)]))];
+
 function craftParts(id, lvl, ml, o) {
   const recs = DB.items[id].r[lvl];
   const parts = recs.map((r, i) => {
     let back = 0, gone = 0;
+    const crafted = [];
     for (const [mid, cnt, art] of r.m) {
-      const p = buyOf(ml, mid, o);
+      let p = buyOf(ml, mid, o);
+      // Artifacts and other never-returned ingredients: making them yourself is sometimes much cheaper than buying.
+      if (art) { const c = ingredientCost(mid, ml, o); if (c != null && (p == null || c < p)) { crafted.push({ mid, cnt, cost: c, market: p }); p = c } }
       if (p == null) return { label: recipeLabel(recs, i), missing: true };
       if (art) gone += p * cnt; else back += p * cnt;
     }
-    return { label: recipeLabel(recs, i), back, gone, n: r.n, fee: stationFee(r) };
+    return { label: recipeLabel(recs, i) + (crafted.length ? ` (make the ${crafted.map(c => nameOf(c.mid)).join(", ")} yourself)` : ""), back, gone, n: r.n, fee: stationFee(r), crafted };
   });
   const u = recs[0].u;
   if (u && lvl !== "0") {
@@ -838,6 +862,7 @@ function profitHtml() {
   html += `<div class="tablewrap"><table><thead><tr><th>How you get it</th><th class="num">Real cost</th><th class="num">Profit</th></tr></thead><tbody>
     ${e.opts.map(o => `<tr${o === e.best && e.opts.length > 1 ? ' class="best"' : ""}><td>${esc(o.label)}${o === e.best && e.opts.length > 1 ? ' <span class="pill good">cheapest</span>' : ""}</td><td class="num">${fmt(o.cost)}</td><td class="num">${o.cost != null && e.net != null ? signed(e.net - o.cost) : "—"}</td></tr>`).join("")}
     </tbody></table></div><ul>`;
+  for (const c of (e.best && e.best.crafted) || []) html += `<li class="pos">Make the <b>${esc(nameOf(c.mid))}</b> yourself for about <b class="mono">${fmt(c.cost)}</b>${c.market != null ? ` instead of buying it for ${fmt(c.market)}` : " (nobody sells it here)"}: ${esc(DB.items[c.mid.split("@")[0]].r[c.mid.split("@")[1] || "0"][0].m.map(([x, n]) => n + " × " + nameOf(x)).join(" + "))}${c.cnt > 1 ? `, ${c.cnt} of them per craft` : ""}.</li>`;
   html += `<li>Real cost = materials × ${Math.round((1 - e.rr) * 1000) / 10}% (a ${Math.round(e.rr * 1000) / 10}% return rate${S.rr === "auto" ? (cityBonus(current, e.craftLoc) ? ` with ${esc(e.craftLoc)}'s bonus for this item` : ` in ${esc(e.craftLoc)}, which has no bonus for this item`) + (S.focus ? " and focus" : "") : ""}) + artifacts, tomes and sigils at full price, because those never come back${+S.fee100 && e.best && !e.best.upgrade ? ` + a ${fmt(e.best.fee / e.best.n)} station fee (${fmt(e.best.fee * 100 / +S.fee100)} nutrition at ${fmt(+S.fee100)} per 100)` : ""}.</li>`;
   if (h) html += h.vol ? `<li>About <b class="mono">${fmt(h.vol)}</b> sell per day in ${esc(cityEl.value)} (28-day average, all qualities). Craft about <b class="mono">${fmt(Math.max(1, Math.floor(h.vol * 0.2)))}</b> at a time (20% of daily sales, the safe end of the 20–30% rule) so they sell in a day or two.</li>`
     : `<li class="old">No recorded sales in ${esc(cityEl.value)} over the last 28 days. Craft one or two to test before making a batch.</li>`;
@@ -1126,7 +1151,7 @@ async function loadCompare(ev) {
   const force = !!(ev && ev.target && ev.target.classList.contains("link"));
   const recs = DB.items[current].r[level], pid = priceId(current, level);
   const ids = new Set([pid]);
-  recs.forEach(r => r.m.forEach(m => ids.add(m[0])));
+  recs.forEach(r => r.m.forEach(m => withInputs([m[0]]).forEach(x => ids.add(x))));
   if (recs[0].u && level !== "0") { ids.add(priceId(current, String(level - 1))); ids.add(recs[0].u[0]) }
   const btn = $("cmp-go"); if (btn) { btn.disabled = true; btn.textContent = "Loading every city…" }
   try {
@@ -1143,7 +1168,7 @@ async function loadCompare(ev) {
 let loading = 0;
 async function loadPrices(force) {
   const recs = DB.items[current].r[level], pid = priceId(current, level);
-  const ids = [...new Set([pid, ...recs.flatMap(r => r.m.map(m => m[0]))])];
+  const ids = [...new Set([pid, ...withInputs(recs.flatMap(r => r.m.map(m => m[0])))])];
   if (recs[0].u && level !== "0") ids.push(priceId(current, String(level - 1)), recs[0].u[0]);
   const city = cityEl.value, locs = [...new Set([city, matLoc()])], key = city + "|" + current + "|" + level;
   const fetched = store.get("f:" + key);
@@ -1256,7 +1281,7 @@ async function runScan(force) {
   for (const { id, l } of rows) {
     const recs = DB.items[id].r[l];
     products.add(priceId(id, l));
-    recs.forEach(r => r.m.forEach(x => mats.add(x[0])));
+    recs.forEach(r => r.m.forEach(x => withInputs([x[0]]).forEach(y => mats.add(y))));
     if (recs[0].u && l !== "0") { mats.add(priceId(id, String(l - 1))); mats.add(recs[0].u[0]) }
   }
   // Skip what was fetched for these markets in the last 10 minutes, so changing filters and re-scanning costs nothing.
@@ -1427,8 +1452,9 @@ function matCost(id, lvl, r) {
     } else {
       // For weapons and armor, anything that isn't one of the four materials is an artifact: never returned.
       art = { id: mid, cnt };
-      const p = getPrice(MC.city, mid);
-      if (p && p.s) { gone += p.s * cnt; art.d = p.d } else art.missing = true;
+      const p = getPrice(MC.city, mid), made = ingredientCost(mid, MC.city, CARD_MODE);
+      if (made != null && (!p || !p.s || made < p.s)) { gone += made * cnt; art.made = made; art.market = p && p.s }
+      else if (p && p.s) { gone += p.s * cnt; art.d = p.d } else art.missing = true;
     }
   }
   if (missingMat) return { missingMat };
@@ -1479,7 +1505,7 @@ function renderMats() {
     const mats = r.m.filter(m => MAT_RE.test(m[0])).map(([m, n]) => `${n} ${MAT_TYPES.find(x => x[0] === MAT_RE.exec(m)[2])[1].toLowerCase()}`).join(" + ");
     html += `<tr data-open="${e.id}" data-l="${l}"><td><div class="mat">${icon(pid, 32)}<div>${esc(e.name)}<span class="age">T${e.it.t}.${l}${r.n > 1 ? " · makes " + r.n : ""}</span></div></div></td>
       <td>${mats}</td><td class="num">${Math.round(c.rr * 1000) / 10}%</td><td class="num">${fmt(c.mats)}</td>
-      <td>${c.art ? `${esc(nameOf(c.art.id))}${c.art.cnt > 1 ? " ×" + c.art.cnt : ""}<span class="age">${c.artCost != null ? fmt(c.artCost) + (c.art.d ? " · " + ageText(c.art.d).text : "") : "no price yet"}</span>` : "—"}</td>
+      <td>${c.art ? `${esc(nameOf(c.art.id))}${c.art.cnt > 1 ? " ×" + c.art.cnt : ""}<span class="age">${c.artCost != null ? fmt(c.artCost) + (c.art.made != null ? ` · make it yourself${c.art.market ? ` (buying: ${fmt(c.art.market)})` : ""}` : c.art.d ? " · " + ageText(c.art.d).text : "") : "no price yet"}</span>` : "—"}</td>
       <td class="num">${c.fee ? fmt(c.fee) : "—"}</td><td class="num"><b>${c.total != null ? fmt(c.total) : "—"}</b></td>
       <td class="num">${sale ? fmt(sale.v) + `<span class="age ${a && a.old ? "old" : ""}">${a ? a.text : ""}</span>` : "—"}</td>
       <td class="num">${profit != null ? signed(profit) + `<span class="age">${pct(margin)} ${verdict(margin).replace(/<[^>]+>/g, "")}</span>` : "—"}</td></tr>`;
@@ -1494,7 +1520,7 @@ async function fillMats(replace) {
   const n = $("m-note"), ids = [];
   for (const [type] of MAT_TYPES) for (let t = 2; t <= 8; t++) for (let e = 0; e <= (t < 4 ? 0 : 4); e++) ids.push(matId(type, t, e));
   const arts = new Set();
-  for (const { e, l } of matsItems()) e.it.r[l].forEach(r => r.m.forEach(m => { if (!MAT_RE.test(m[0])) arts.add(m[0]) }));
+  for (const { e, l } of matsItems()) e.it.r[l].forEach(r => r.m.forEach(m => { if (!MAT_RE.test(m[0])) withInputs([m[0]]).forEach(y => arts.add(y)) }));
   $("m-fill").disabled = $("m-fillall").disabled = true;
   try {
     const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
@@ -1592,7 +1618,7 @@ async function scanFlips(force) {
   const products = new Set(), mats = new Set();
   for (const e of items) for (const p of flipPaths(e)) {
     products.add(priceId(e.id, p.a)); products.add(priceId(e.id, p.b)); p.ups.forEach(u => mats.add(u[0]));
-    e.it.r[p.b].forEach(r => r.m.forEach(m => mats.add(m[0]))); // to compare with crafting it
+    e.it.r[p.b].forEach(r => r.m.forEach(m => withInputs([m[0]]).forEach(y => mats.add(y)))); // to compare with crafting it
   }
   btn.disabled = true;
   const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
@@ -1804,6 +1830,8 @@ function renderFlipDetail() {
     html += `<h4>Or craft it in ${esc(cc)} <span class="age">${Math.round(rr * 1000) / 10}% return rate</span></h4>
       <p>${cost < buy.cost ? `<b class="pos">Crafting is ${fmt(buy.cost - cost)} cheaper each</b>` : `Flipping is ${fmt(cost - buy.cost)} cheaper each`} (craft ${fmt(cost)} vs flip ${fmt(buy.cost)}). Needs the Destiny Board level for T${it.t}.</p>
       <ol class="dsteps">${r.m.map(([mid, cnt, art]) => { const tot = cnt * crafts, buyN = art ? tot : Math.ceil(tot * (1 - rr)), pr = buyOf(cc, mid, mode);
+        const made = (parts[bi].crafted || []).find(c => c.mid === mid);
+        if (made) return `<li>Make <b>${fmt(tot)} × ${esc(nameOf(mid))}</b> yourself (about ${fmt(made.cost)} each${made.market != null ? ` vs ${fmt(made.market)} to buy` : ""}): ${esc(DB.items[mid.split("@")[0]].r[mid.split("@")[1] || "0"][0].m.map(([x, n]) => fmt(n * tot) + " × " + nameOf(x)).join(" + "))} before returns</li>`;
         return `<li>Buy <b>${fmt(buyN)} × ${esc(nameOf(mid))}</b>${art ? " (never returned)" : ` (${fmt(tot)} used, about ${fmt(tot - buyN)} come back)`}${pr != null ? ` at <b class="mono">${fmt(pr)}</b> → ${fmt(buyN * pr)}` : ""}</li>` }).join("")}
       <li>Craft <b>${crafts}×</b> at the cheapest station${stationFee(r) ? ` (station fee about ${fmt(stationFee(r) * crafts)})` : ""}, then sell as above.</li></ol>`;
   }
