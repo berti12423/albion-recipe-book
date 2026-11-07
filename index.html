@@ -890,7 +890,7 @@ function renderCard() {
   const it = DB.items[current], recs = it.r[level];
   const card = $("card");
   const lv = Object.keys(it.r);
-  let html = `<div class="title">${icon(priceId(current, level), 72)}<div><h2></h2><div class="meta">Tier ${it.t || "–"} · ${pretty(it.c)} · ${pretty(it.s)}</div></div></div>`;
+  let html = `<div class="title">${icon(priceId(current, level), 72)}<div><h2></h2><div class="meta">Tier ${it.t || "–"} · ${pretty(it.c)} · ${pretty(it.s)} · <a href="https://allthingsalbion.com/en/items/${encodeURIComponent(priceId(current, level))}" target="_blank" rel="noopener">Drop rates &amp; sources ↗</a></div></div></div>`;
   if (lv.length > 1) html += `<div class="ench" role="group" aria-label="Enchantment">${lv.map(l => `<button class="l${l}" data-l="${l}" aria-pressed="${l === level}">${it.t ? it.t + "." + l : "." + l}</button>`).join("")}</div>`;
   html += unlockHtml(current, it);
   recs.forEach((r, i) => {
