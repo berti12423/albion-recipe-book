@@ -697,7 +697,7 @@ function ingredientCost(mid, ml, o) {
     if (isMeld(r)) continue;
     let back = 0, gone = 0, ok = true;
     for (const [x, c, a] of r.m) { const p = buyOf(ml, x, o); if (p == null) { ok = false; break } if (a) gone += p * c; else back += p * c }
-    if (ok) { const c = (back * (1 - rr) + gone + stationFee(r)) / r.n; if (best == null || c < best) best = c }
+    if (ok) { const c = (back * (1 - rr) + gone + stationFee(r) + (r.s || 0)) / r.n; if (best == null || c < best) best = c }
   }
   return best;
 }
@@ -720,8 +720,8 @@ function craftParts(id, lvl, ml, o) {
       if (p == null) return { label: recipeLabel(recs, i), missing: true };
       if (art) gone += p * cnt; else back += p * cnt;
     }
-    if (isMeld(r)) return { label: "Meld: gives a random artifact, maybe not this one", back, gone, n: r.n, fee: stationFee(r), crafted, meld: true };
-    return { label: recipeLabel(recs, i) + (crafted.length ? ` (make the ${crafted.map(c => nameOf(c.mid)).join(", ")} yourself)` : ""), back, gone, n: r.n, fee: stationFee(r), crafted };
+    if (isMeld(r)) return { label: "Meld: gives a random artifact, maybe not this one", back, gone, n: r.n, fee: stationFee(r), silver: r.s || 0, crafted, meld: true };
+    return { label: recipeLabel(recs, i) + (crafted.length ? ` (make the ${crafted.map(c => nameOf(c.mid)).join(", ")} yourself)` : ""), back, gone, n: r.n, fee: stationFee(r), silver: r.s || 0, crafted };
   });
   const u = recs[0].u;
   if (u && lvl !== "0") {
@@ -731,7 +731,7 @@ function craftParts(id, lvl, ml, o) {
   return parts;
 }
 // Artifacts, tomes and sigils (art) never come back; the rest returns at the return rate.
-const partCost = (p, rr) => p.missing ? null : p.upgrade ? p.fixed : (p.back * (1 - rr) + p.gone + p.fee) / p.n;
+const partCost = (p, rr) => p.missing ? null : p.upgrade ? p.fixed : (p.back * (1 - rr) + p.gone + p.fee + (p.silver || 0)) / p.n;
 // A craft uses item value × 0.1125 nutrition (r.v is the item value of the craft's ingredients, from the game files),
 // and the station charges its fee per 100 nutrition.
 const stationFee = r => (r.v || 0) * 0.1125 * (+S.fee100 || 0) / 100;
@@ -1239,11 +1239,11 @@ function pickOne(el, items, key, live) {
 }
 
 function setupFinder() {
-  const cats = [...new Set(DB.list.map(e => e.it.c))].sort();
+  const cats = [...new Set(DB.list.filter(e => !notStationCrafted(e.it)).map(e => e.it.c))].sort();
   const catEl = $("f-cat"), subEl = $("f-sub");
   catEl.innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option value="${esc(c)}">${esc(pretty(c))}</option>`).join("");
   const fillSub = () => {
-    const subs = [...new Set(DB.list.filter(e => e.it.c === F.cat).map(e => e.it.s))].sort();
+    const subs = [...new Set(DB.list.filter(e => e.it.c === F.cat && !notStationCrafted(e.it)).map(e => e.it.s))].sort();
     subEl.innerHTML = F.cat ? '<option value="">All subcategories</option>' + subs.map(s => `<option value="${esc(s)}">${esc(pretty(s))}</option>`).join("") : '<option value="">Pick a category first</option>';
     subEl.disabled = !F.cat; subEl.value = subs.includes(F.sub) ? F.sub : "";
   };
@@ -1270,9 +1270,13 @@ function setupFinder() {
   $("f-refresh").onclick = () => runScan(true);
 }
 
+// Not made at a crafting station: artifacts and their fragments (melded or transmuted at the Artifact Foundry), raw
+// resources (transmuted for silver), maps and guild items. The finder leaves these out.
+const notStationCrafted = it => it.c === "artefacts" || ["fragments", "resources", "cityresources", "maps", "guilds"].includes(it.s);
 function finderItems() {
   const words = F.name.trim().toLowerCase().split(/\s+/).filter(Boolean), out = [];
   for (const e of DB.list) {
+    if (notStationCrafted(e.it)) continue;
     if (F.cat && e.it.c !== F.cat) continue;
     if (F.sub && e.it.s !== F.sub) continue;
     if (F.tier && e.it.t !== +F.tier) continue;
