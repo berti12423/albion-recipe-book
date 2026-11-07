@@ -166,6 +166,44 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 .chips button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); box-shadow: inset 0 0 0 1px var(--accent) }
 .chips button.red::after { content: " ⚠"; color: var(--warn) }
 .settings-group { display: contents }
+.flips .path-head { align-items: start }
+.flips details.more summary { cursor: pointer; color: var(--muted); font-size: .9rem }
+.flips details.more[open] summary { margin-bottom: 8px }
+.flipwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start }
+.flipwrap:has(.flipdetail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(380px, 520px) }
+.flipdetail { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow-y: auto; padding: 14px 16px }
+.flipdetail h3 { margin: 0; font: 700 1.15rem var(--display) }
+.flipdetail h4 { margin: 14px 0 6px; font: 500 .78rem var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }
+.dhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px }
+.dsum { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 10px 0 4px }
+.dsum .big { font: 500 1.3rem var(--mono) }
+.dsteps { padding-left: 20px; display: flex; flex-direction: column; gap: 8px; margin: 6px 0; font-size: .93rem }
+.own { display: inline-flex; gap: 6px; align-items: center; font-size: .85rem; color: var(--muted); margin-left: 6px }
+.own input { width: 6.5rem; font: .85rem var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px }
+.ladder { font-size: .85rem }
+.ladder th, .ladder td { padding: 4px 6px }
+.ladder th small { color: var(--accent); font-weight: 500 }
+.ladder td.lad[data-role] { cursor: pointer }
+.ladder td.lad[data-role]:hover { background: var(--accent-soft) }
+.ladder td.pick { box-shadow: inset 0 0 0 2px var(--good); font-weight: 700 }
+.ladder td.na { color: var(--muted) }
+.pill.grade { font: 700 .8rem var(--mono); padding: 1px 8px }
+.pill.gA { color: var(--good) } .pill.gB { color: var(--e2) } .pill.gC { color: var(--accent) } .pill.gD { color: var(--warn) }
+.fliptable tr[data-i] { cursor: pointer }
+.fliptable tr[data-i]:hover, .fliptable tr.sel { background: var(--accent-soft) }
+.fliptable thead th { position: sticky; top: 0; background: var(--panel); z-index: 1 }
+.tracker { padding: 14px 16px; margin-top: 4px }
+.tracker h3 { margin: 0; font: 700 1.15rem var(--display) }
+.shop { white-space: pre-wrap; font: .85rem var(--mono); background: var(--bg); border-radius: 8px; padding: 10px 12px; margin: 6px 0 }
+.tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-top: 10px }
+.tcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--bg) }
+.tcard.s-sold { opacity: .75 }
+.tstate { display: flex; gap: 4px; flex-wrap: wrap }
+.tstate span { font: .72rem var(--mono); padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted) }
+.tstate span.on { border-color: var(--accent); color: var(--ink); background: var(--accent-soft) }
+.tnums { font-size: .88rem }
+.tcard .controls { gap: 6px }
+.tcard .own { margin-left: 0 }
 .matgrids { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px }
 .matgrid { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px }
 .matgrid h4 { margin: 0 0 6px; font: 700 1rem var(--display); display: flex; gap: 8px; align-items: center }
@@ -297,28 +335,39 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   <div class="card"><div class="tablewrap" id="m-out"></div></div>
 </section>
 
-<section id="view-flips" class="finder" hidden>
+<section id="view-flips" class="finder flips" hidden>
   <div class="path-head"><div><h2>Enchant flips</h2>
-    <p>Items worth buying at a lower enchantment and upgrading at the Artifact Foundry: runes take .0 to .1, souls .1 to .2, relics .2 to .3. Cost = the cheapest sell order for the lower item + the runes, souls or relics. Only items that really sell are shown, and the sale price is checked against 28 days of sales.</p></div></div>
+    <p>Buy an item at a lower enchantment, upgrade it at the Artifact Foundry (runes .0→.1, souls .1→.2, relics .2→.3) and sell it. Pick the cities you're willing to use; each flip buys the item, the runes, souls and relics, and sells wherever is best among them. Sale prices are checked against 28 days of real sales. Click a flip for the full plan.</p></div>
+    <button id="x-tracker-toggle" class="primary">Tracker</button></div>
   <div class="fgrid">
     <label class="fld">Search<input id="x-q" type="search" placeholder="e.g. bow, hood" autocomplete="off"></label>
     <label class="fld">Category<select id="x-cat"></select></label>
     <label class="fld">Tier<select id="x-tier"><option value="">All tiers</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
-    <label class="fld">Buy in<select id="x-buy"></select></label>
-    <label class="fld">Sell in<select id="x-sell"></select></label>
     <label class="fld">Enchant steps<select id="x-steps"><option value="3">All combinations (.0→.1 up to .0→.3)</option><option value="2">Up to 2 steps (e.g. .0→.2)</option><option value="1">1 step only (e.g. .0→.1)</option></select></label>
-    <label class="fld">Sell by<select id="x-sellby"><option value="order">Sell order</option><option value="instant">Instant (buy order)</option></select></label>
-  </div>
-  <div class="fgrid nums">
-    <label class="fld">Min sold / day<input id="x-vol" type="number" min="0" step="1"></label>
-    <label class="fld">Min profit each<input id="x-minprofit" type="number" step="500"></label>
-    <label class="fld">Min margin %<input id="x-minmargin" type="number" step="5"></label>
-    <label class="fld">Max data age (h)<input id="x-age" type="number" min="0" step="1"></label>
+    <label class="fld">Sell by<select id="x-sellby"><option value="order">Sell order (1 silver under)</option><option value="instant">Instant (into buy orders)</option></select></label>
     <label class="fld">Silver to spend (0 = no limit)<input id="x-budget" type="number" min="0" step="100000" placeholder="e.g. 2000000"></label>
   </div>
-  <div class="controls"><button class="primary" id="x-scan">Scan prices</button><button id="x-refresh" title="Load every price again instead of reusing recent ones">Refresh prices</button><label class="chk">Sort by <select id="x-sort"><option value="day">Total profit</option><option value="profit">Profit each</option><option value="margin">Margin</option></select></label></div>
-  <p class="note" id="x-note">Pick your filters and press Scan. A full scan of every tier takes about a minute.</p>
-  <div class="card"><div class="tablewrap" id="x-out"></div></div>
+  <div class="fld">Cities to use<div class="chips" id="x-cities"></div></div>
+  <details class="more"><summary>More filters</summary>
+    <div class="fgrid nums">
+      <label class="fld">Min sold / day<input id="x-vol" type="number" min="0" step="1"></label>
+      <label class="fld">Min profit each<input id="x-minprofit" type="number" step="500"></label>
+      <label class="fld">Min margin %<input id="x-minmargin" type="number" step="5"></label>
+      <label class="fld">Max data age (h)<input id="x-age" type="number" min="0" step="1"></label>
+      <label class="fld">Lowest grade shown<select id="x-grade"><option value="D">Any (A–D)</option><option value="C">C or better</option><option value="B">B or better</option><option value="A">Only A</option></select></label>
+    </div>
+  </details>
+  <div class="controls">
+    <button class="primary" id="x-scan">Scan prices</button>
+    <button id="x-refresh" title="Load every price again instead of reusing recent ones">Refresh prices</button>
+    <label class="chk">Sort by <select id="x-sort"><option value="day">Total profit</option><option value="profit">Profit each</option><option value="margin">Margin</option><option value="grade">Confidence</option></select></label>
+  </div>
+  <p class="note" id="x-note">Pick your cities and filters and press Scan. Prices you loaded recently are reused.</p>
+  <div class="flipwrap">
+    <div class="card"><div class="tablewrap" id="x-out"></div></div>
+    <aside class="card flipdetail" id="x-detail" hidden></aside>
+  </div>
+  <section class="card tracker" id="x-tracker" hidden></section>
 </section>
 
 <section id="view-guide" class="guide" hidden>
@@ -553,7 +602,11 @@ const cityEl = $("city");
 cityEl.value = store.get("city") || "Fort Sterling";
 
 const pretty = s => (s || "other").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-const nameOf = id => DB.names[id.split("@")[0]] || pretty(id.split("@")[0].replace(/^T\d_/, ""));
+// Enchanted resources ("T5_CLOTH_LEVEL2@2") have no name of their own: use the plain resource's name plus the enchantment.
+const nameOf = id => {
+  const b = id.split("@")[0], lv = /^(.*)_LEVEL(\d)$/.exec(b);
+  return DB.names[b] || (lv && DB.names[lv[1]] ? DB.names[lv[1]] + " ." + lv[2] : pretty(b.replace(/^T\d_/, "")));
+};
 // The item name without its tier word ("Adept's Holy Staff" -> "Holy Staff"), so one item's tiers sort together.
 const baseName = n => n.replace(/^(Beginner|Novice|Journeyman|Adept|Expert|Master|Grandmaster|Elder)'s /, "");
 const fmt = n => n == null ? "—" : Math.round(n).toLocaleString("en-US");
@@ -984,17 +1037,33 @@ async function fetchHistory(ids, loc) {
     await new Promise(r => setTimeout(r, 20000));
   }
   if (!res.ok) return;
-  const since = Date.now() - 28 * 864e5, acc = {};
+  const since = Date.now() - 28 * 864e5, week = Date.now() - 7 * 864e5, acc = {};
   for (const r of await res.json()) {
     // Volume counts every quality; the average price only normal and good, the quality a fresh craft is priced at.
     // Otherwise a few masterpiece sales make an ordinary listing look cheap.
-    const a = acc[r.location + "|" + r.item_id] ??= { n: 0, sum: 0, ln: 0, lsum: 0 };
-    for (const d of r.data) if (new Date(d.timestamp + "Z").getTime() >= since) {
-      a.n += d.item_count; a.sum += d.item_count * d.avg_price;
-      if (r.quality <= 2) { a.ln += d.item_count; a.lsum += d.item_count * d.avg_price }
+    const a = acc[r.location + "|" + r.item_id] ??= { n: 0, sum: 0, ln: 0, lsum: 0, n7: 0, ln7: 0, lsum7: 0, days: {}, any: new Set() };
+    for (const d of r.data) {
+      const t = new Date(d.timestamp + "Z").getTime();
+      if (t < since) continue;
+      a.n += d.item_count; a.sum += d.item_count * d.avg_price; a.any.add(d.timestamp.slice(0, 10));
+      if (t >= week) a.n7 += d.item_count;
+      if (r.quality <= 2) {
+        a.ln += d.item_count; a.lsum += d.item_count * d.avg_price;
+        if (t >= week) { a.ln7 += d.item_count; a.lsum7 += d.item_count * d.avg_price }
+        const day = a.days[d.timestamp.slice(0, 10)] ??= { n: 0, s: 0 };
+        day.n += d.item_count; day.s += d.item_count * d.avg_price;
+      }
     }
   }
-  for (const l of locs) for (const id of ids) { const a = acc[l + "|" + id]; store.set("h:" + l + "|" + id, { vol: a ? a.n / 28 : 0, avg: a && a.ln ? a.lsum / a.ln : a && a.n ? a.sum / a.n : null, lq: 1, t: Date.now() }) }
+  // Also kept for the confidence grade: last-7-day volume and price, how much the daily price swings (cv) and
+  // on how many days there was any data at all.
+  for (const l of locs) for (const id of ids) {
+    const a = acc[l + "|" + id], daily = a ? Object.values(a.days).filter(d => d.n).map(d => d.s / d.n) : [];
+    const mean = daily.length ? daily.reduce((x, y) => x + y, 0) / daily.length : 0;
+    const cv = daily.length > 2 && mean ? Math.sqrt(daily.reduce((x, y) => x + (y - mean) ** 2, 0) / daily.length) / mean : null;
+    store.set("h:" + l + "|" + id, { vol: a ? a.n / 28 : 0, avg: a && a.ln ? a.lsum / a.ln : a && a.n ? a.sum / a.n : null,
+      vol7: a ? a.n7 / 7 : 0, avg7: a && a.ln7 ? a.lsum7 / a.ln7 : null, cv, days: a ? a.any.size : 0, dv: 2, lq: 1, t: Date.now() });
+  }
 }
 
 function realSale(sale, h, loc) {
@@ -1448,30 +1517,50 @@ async function fillMats(replace) {
 }
 
 // Enchant flips: buy an item at a lower enchantment, upgrade it with runes, souls or relics, and sell it.
-let XF = Object.assign({ q: "", cat: "", tier: "", buy: "Fort Sterling", sell: "", steps: "3", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10, age: 24, sort: "day", budget: 0 }, store.get("flips") || {});
-let flipScan = null;
-const saveXF = () => store.set("flips", XF);
+// Settings (XF), the tracker (FT) and the materials you already own (XF.owned) live in localStorage.
+let XF = Object.assign({ q: "", cat: "", tier: "", cities: ["Fort Sterling"], steps: "3", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10,
+  age: 24, sort: "day", budget: 0, grade: "D", owned: {} }, store.get("flips") || {});
+if (!Array.isArray(XF.cities)) XF.cities = [XF.buy && XF.buy !== "*" ? XF.buy : "Fort Sterling"];
+XF.owned ||= {};
+let flipScan = null, flipDetail = null, flipResCache = [];
+let FT = store.get("flipTrack") || [];
+const saveXF = () => store.set("flips", XF), saveFT = () => store.set("flipTrack", FT);
 const FLIP_CATS = ["weapons", "head", "armors", "shoes", "offhands", "capes", "bags", "gathering"];
+const ENCH_NAME = { RUNE: "runes", SOUL: "souls", RELIC: "relics" };
+const matWord = mid => ENCH_NAME[mid.split("_")[1]] || nameOf(mid);
 const flipOk = () => +XF.age > 0 ? d => !d || (Date.now() - new Date(d + "Z").getTime()) / 36e5 <= +XF.age : anyPrice;
+const flipMode = () => ({ buyBy: "instant", sellBy: XF.sellBy, ok: flipOk() });
+// Items and runes are bought in the chosen royal cities (Caerleon if only the black market is chosen); any chosen market sells.
+const buyCities = () => { const c = XF.cities.filter(x => !isBM(x)); return c.length ? c : ["Caerleon"] };
+const sellCities = () => XF.cities.length ? XF.cities : ["Fort Sterling"];
+const hoursOld = d => d ? (Date.now() - new Date(d + (d.endsWith("Z") ? "" : "Z")).getTime()) / 36e5 : Infinity;
 
 function setupFlips() {
   $("x-cat").innerHTML = '<option value="">All gear</option>' + FLIP_CATS.map(c => `<option value="${c}">${pretty(c)}</option>`).join("");
-  $("x-buy").innerHTML = '<option value="*">Cheapest of all cities</option>' + CITIES.map(c => `<option>${c}</option>`).join("");
-  $("x-sell").innerHTML = '<option value="">Same city as I buy in</option><option value="*">Best of all cities</option>' + SELL_MARKETS.map(c => `<option>${c}</option>`).join("");
-  for (const [id, key, live] of [["x-q", "q"], ["x-cat", "cat"], ["x-tier", "tier"], ["x-buy", "buy"], ["x-sell", "sell"], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-vol", "vol", 1], ["x-minprofit", "minProfit", 1], ["x-minmargin", "minMargin", 1], ["x-age", "age", 1], ["x-sort", "sort", 1], ["x-budget", "budget", 1]]) {
+  for (const [id, key, live] of [["x-q", "q"], ["x-cat", "cat"], ["x-tier", "tier"], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-vol", "vol", 1],
+    ["x-minprofit", "minProfit", 1], ["x-minmargin", "minMargin", 1], ["x-age", "age", 1], ["x-sort", "sort", 1], ["x-budget", "budget", 1], ["x-grade", "grade", 1]]) {
     const el = $(id);
     el.value = XF[key];
     el[el.tagName === "SELECT" ? "onchange" : "oninput"] = () => { XF[key] = el.value; saveXF(); if (live) renderFlips() };
   }
+  const drawCities = () => {
+    const all = SELL_MARKETS, allOn = all.every(c => XF.cities.includes(c));
+    $("x-cities").innerHTML = `<button type="button" data-v="" aria-pressed="${allOn}">All</button>` + all.map(c =>
+      `<button type="button" data-v="${esc(c)}" aria-pressed="${XF.cities.includes(c)}"${RED.has(c) ? ' class="red" title="Red zone: you can be killed and lose your load on the way"' : ""}>${esc(c)}</button>`).join("");
+    $("x-cities").querySelectorAll("button").forEach(b => b.onclick = () => {
+      const v = b.dataset.v;
+      if (!v) XF.cities = allOn ? ["Fort Sterling"] : [...all];
+      else { const s = new Set(XF.cities); s.has(v) ? s.delete(v) : s.add(v); if (s.size) XF.cities = all.filter(c => s.has(c)) }
+      saveXF(); drawCities();
+    });
+  };
+  drawCities();
   $("x-scan").onclick = () => scanFlips(false);
   $("x-refresh").onclick = () => scanFlips(true);
+  $("x-tracker-toggle").onclick = () => { $("x-tracker").hidden = !$("x-tracker").hidden; store.set("flipTrackOpen", !$("x-tracker").hidden); renderTracker() };
+  $("x-tracker").hidden = !store.get("flipTrackOpen") && !FT.length;
+  renderTracker();
 }
-
-const flipMarkets = () => {
-  const buy = XF.buy === "*" ? CITIES : [XF.buy];
-  const sell = XF.sell === "*" ? SELL_MARKETS : XF.sell ? [XF.sell] : null;
-  return { buy, sell };
-};
 
 function flipItems() {
   const words = XF.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -1499,7 +1588,7 @@ async function scanFlips(force) {
   force = force === true;
   const items = flipItems(), n = $("x-note"), btn = $("x-scan");
   if (!items.length) { n.textContent = "No enchantable items match these filters."; return }
-  const m = flipMarkets(), locs = [...new Set([...m.buy, ...(m.sell || m.buy)])];
+  const locs = [...new Set([...buyCities(), ...sellCities()])];
   const products = new Set(), mats = new Set();
   for (const e of items) for (const p of flipPaths(e)) {
     products.add(priceId(e.id, p.a)); products.add(priceId(e.id, p.b)); p.ups.forEach(u => mats.add(u[0]));
@@ -1510,11 +1599,11 @@ async function scanFlips(force) {
   try {
     await fetchPrices([...mats], locs, step("rune, soul, relic and material prices"), { persist: false, qualities: "1", force });
     await fetchPrices([...products], locs, step("item prices"), { persist: false, qualities: "1,2", force });
-    flipScan = { items, m };
+    flipScan = { items };
     renderFlips();
     // Check the most promising flips against 28 days of real sales in the city they sell in, a batch at a time.
     for (let round = 0; round < 12; round++) {
-      const todo = flipResults(true).filter(r => r.profit > 0 && !(r.h && r.h.lq === 1 && Date.now() - r.h.t < 36e5)).slice(0, 40);
+      const todo = flipResults(true).filter(r => r.profit > 0 && !(r.h && r.h.lq === 1 && r.h.dv === 2 && Date.now() - r.h.t < 36e5)).slice(0, 40);
       if (!todo.length) break;
       n.textContent = `Checking real sales… (${round + 1})`;
       const bySell = {};
@@ -1529,72 +1618,306 @@ async function scanFlips(force) {
   btn.disabled = false;
 }
 
+// Price one flip for chosen cities: the item where it's cheapest, each rune/soul/relic where it's cheapest, the
+// sale where it nets the most. pin can fix any of them (from the detail panel's ladder).
+function priceFlip(e, p, mode, pin = {}) {
+  const pidA = priceId(e.id, p.a), pidB = priceId(e.id, p.b);
+  let item = null;
+  for (const c of pin.buy ? [pin.buy] : buyCities()) { const v = buyOf(c, pidA, mode); if (v != null && (!item || v < item.v)) item = { city: c, v, d: (getPrice(c, pidA) || {}).d } }
+  if (!item) return null;
+  const mats = [];
+  for (const [mid, cnt] of p.ups) {
+    let best = null;
+    for (const c of pin.mats && pin.mats[mid] ? [pin.mats[mid]] : buyCities()) { const v = buyOf(c, mid, mode); if (v != null && (!best || v < best.v)) best = { city: c, v } }
+    if (!best) return null;
+    mats.push({ mid, cnt, city: best.city, v: best.v });
+  }
+  const cost = item.v + mats.reduce((s, m) => s + m.v * m.cnt, 0);
+  return { item, mats, cost };
+}
+function bestSale(e, p, mode, raw, pinSell) {
+  const minVol = +XF.vol || 0, pid = priceId(e.id, p.b);
+  let sell = null;
+  for (const s of pinSell ? [pinSell] : sellCities()) {
+    const h = store.get("h:" + s + "|" + pid);
+    const sale = realSale(saleOf(pid, s, mode), h, s);
+    if (!sale) continue;
+    // Troll prices, unsold items and slow sellers drop out even while choosing what to check next, so the next-best city gets checked.
+    if (sale.flag === "troll" || sale.flag === "nosales" || (h && h.lq === 1 && h.vol < minVol)) continue;
+    if (!raw && (sale.flag === "unchecked" || !h)) continue;
+    if (!sell || sale.net > sell.sale.net) sell = { s, sale, h };
+  }
+  return sell;
+}
+
+// Confidence: how much to trust a flip, from price swings, data age, a falling price and gaps in the sales data.
+function flipGrade(r) {
+  const why = [];
+  let pts = 100;
+  const h = r.h;
+  if (h && h.cv != null) { if (h.cv > 0.25) { pts -= 30; why.push("price swings a lot day to day") } else if (h.cv > 0.12) { pts -= 12; why.push("price moves around") } }
+  if (h && h.avg7 && h.avg && h.avg7 < 0.85 * h.avg) { pts -= 20; why.push(`falling: last 7 days ${Math.round((1 - h.avg7 / h.avg) * 100)}% under the 28-day average`) }
+  if (h && h.vol7 != null && h.vol && h.vol7 < 0.5 * h.vol) { pts -= 10; why.push("fewer sales this week") }
+  if (h && h.days != null && h.days < 10) { pts -= 15; why.push(`sales data on only ${h.days} of 28 days`) }
+  const sAge = hoursOld(r.sale.d), bAge = hoursOld(r.buy.item.d);
+  if (sAge > 24) { pts -= 25; why.push("sale price over a day old") } else if (sAge > 8) { pts -= 10; why.push("sale price several hours old") }
+  if (bAge > 24) { pts -= 15; why.push("buy price over a day old") }
+  if (r.sale.flag === "avg") { pts -= 5; why.push("listed above its usual price; counted at the average") }
+  const g = pts >= 85 ? "A" : pts >= 65 ? "B" : pts >= 45 ? "C" : "D";
+  return { g, pts, why };
+}
+
 // raw: every priced flip before the sales check, used to pick which ones to check next.
 function flipResults(raw) {
   if (!flipScan) return [];
-  const ok = flipOk(), mode = { buyBy: "instant", sellBy: XF.sellBy, ok }, out = [];
-  const minVol = +XF.vol || 0, minProfit = XF.minProfit === "" ? -Infinity : +XF.minProfit, minM = XF.minMargin === "" ? -Infinity : +XF.minMargin / 100;
+  const mode = flipMode(), out = [];
+  const minProfit = XF.minProfit === "" ? -Infinity : +XF.minProfit, minM = XF.minMargin === "" ? -Infinity : +XF.minMargin / 100;
+  const budget = +XF.budget || 0, gradeOk = { A: "A", B: "AB", C: "ABC", D: "ABCD" }[XF.grade || "D"];
   for (const e of flipScan.items) for (const p of flipPaths(e)) {
-    // Cheapest place to buy the lower item plus all the runes, souls and relics.
-    let best = null;
-    for (const c of flipScan.m.buy) {
-      const item = buyOf(c, priceId(e.id, p.a), mode);
-      if (item == null) continue;
-      let up = 0, okAll = true;
-      for (const [mid, cnt] of p.ups) { const pr = buyOf(c, mid, mode); if (pr == null) { okAll = false; break } up += pr * cnt }
-      if (okAll && (!best || item + up < best.cost)) best = { city: c, item, up, cost: item + up };
-    }
-    if (!best) continue;
-    // Best place to sell the upgraded item, checked against real sales.
-    let sell = null;
-    for (const s of flipScan.m.sell || [best.city]) {
-      const h = store.get("h:" + s + "|" + priceId(e.id, p.b));
-      const sale = realSale(saleOf(priceId(e.id, p.b), s, mode), h, s);
-      if (!sale) continue;
-      // Cities already known to be a troll price, unsold, or too slow drop out even while choosing what to check next,
-      // so the next-best city gets checked instead.
-      if (sale.flag === "troll" || sale.flag === "nosales" || (h && h.lq === 1 && h.vol < minVol)) continue;
-      if (!raw && (sale.flag === "unchecked" || !h)) continue;
-      if (!sell || sale.net > sell.sale.net) sell = { s, sale, h };
-    }
+    const buy = priceFlip(e, p, mode);
+    if (!buy) continue;
+    const sell = bestSale(e, p, mode, raw);
     if (!sell) continue;
-    const profit = sell.sale.net - best.cost, margin = best.cost > 0 ? profit / best.cost : null;
+    const profit = sell.sale.net - buy.cost, margin = buy.cost > 0 ? profit / buy.cost : null;
     if (!raw && (profit < minProfit || margin < minM)) continue;
     // How many to flip: 20% of daily sales, and no more than your silver covers. Items you can't afford even once drop out.
-    const budget = +XF.budget || 0;
-    if (!raw && budget > 0 && best.cost > budget) continue;
+    if (!raw && budget > 0 && buy.cost > budget) continue;
     let amount = sell.h && sell.h.vol ? Math.max(1, Math.floor(sell.h.vol * 0.2)) : null;
-    if (budget > 0) amount = Math.min(amount ?? Infinity, Math.floor(budget / best.cost));
+    if (budget > 0) amount = Math.min(amount ?? Infinity, Math.floor(budget / buy.cost));
     if (amount === Infinity) amount = null;
-    const craft = cheapest(craftParts(e.id, p.b, best.city, mode).filter(x => !x.upgrade), returnRate(e.id, best.city));
-    out.push({ e, ...p, buy: best, craft, sellLoc: sell.s, sale: sell.sale, h: sell.h, profit, margin, amount, perDay: amount != null ? profit * amount : null });
+    const r = { e, ...p, buy, sellLoc: sell.s, sale: sell.sale, h: sell.h, profit, margin, amount, total: amount != null ? profit * amount : null };
+    if (!raw) { r.grade = flipGrade(r); if (!gradeOk.includes(r.grade.g)) continue }
+    out.push(r);
   }
-  const k = raw ? "profit" : XF.sort, v = r => k === "margin" ? r.margin : k === "profit" ? r.profit : (r.perDay ?? -Infinity);
+  const k = raw ? "profit" : XF.sort, v = r => k === "margin" ? r.margin : k === "profit" ? r.profit : k === "grade" ? r.grade.pts : (r.total ?? -Infinity);
   return out.sort((a, b) => v(b) - v(a) || b.profit - a.profit);
 }
 
+const gradePill = g => `<span class="pill grade g${g.g}" title="${esc(g.why.join("; ") || "steady price, fresh data")}">${g.g}</span>`;
+const cityShort = c => ({ "Fort Sterling": "FS", "Martlock": "ML", "Thetford": "TF", "Lymhurst": "LH", "Bridgewatch": "BW", "Brecilien": "BR", "Caerleon": "CL", "Black Market": "BM" }[c] || c);
+
 function renderFlips() {
   const out = $("x-out"), n = $("x-note");
+  renderTracker();
   if (!flipScan) { out.innerHTML = ""; return }
-  const res = flipResults(), checked = flipResults(true).filter(r => r.h && r.h.lq === 1).length;
-  n.textContent = `${res.length} profitable flips that sell at least ${+XF.vol || 0} a day${+XF.budget ? ` and cost under ${short(+XF.budget)} each` : ""}, out of ${checked} checked against real sales. Click a row for the item's recipe.`;
-  if (!res.length) { out.innerHTML = '<p class="empty">No flip passes these filters right now. Try more cities, more enchant steps, a lower minimum, or a longer max data age.</p>'; return }
-  const ench = { RUNE: "runes", SOUL: "souls", RELIC: "relics" };
-  out.innerHTML = `<table><thead><tr><th>Item</th><th>Buy</th><th>Enchant with</th><th>Sell</th><th class="num">Profit each</th><th>Craft instead?</th><th class="num">Sold / day</th><th class="num">Amount</th><th class="num">Total profit*</th></tr></thead><tbody>
-    ${res.slice(0, 300).map(r => {
-      const ab = ageText(r.sale.d), it = r.e.it;
-      return `<tr data-open="${r.e.id}" data-l="${r.b}"><td><div class="mat">${icon(priceId(r.e.id, r.b), 32)}<div>${esc(r.e.name)}<span class="age">T${it.t}.${r.a} → T${it.t}.${r.b}</span></div></div></td>
-        <td class="num">${fmt(r.buy.item)}<span class="age">.${r.a} in ${esc(r.buy.city)}</span></td>
-        <td>${r.ups.map(([mid, cnt]) => `${cnt} ${ench[mid.split("_")[1]] || nameOf(mid)}`).join(" + ")}<span class="age">${fmt(r.buy.up)} · total cost ${fmt(r.buy.cost)}</span></td>
-        <td class="num">${fmt(r.sale.v)}<span class="age">.${r.b} in ${esc(r.sellLoc)}${r.sale.flag === "avg" ? " · 28-day average" : ab ? " · " + ab.text : ""}</span></td>
+  const res = flipResCache = flipResults();
+  n.textContent = `${res.length} profitable flips, checked against real sales, that sell at least ${+XF.vol || 0} a day${+XF.budget ? ` and cost under ${short(+XF.budget)} each` : ""}, using ${XF.cities.join(", ")}.`;
+  if (!res.length) { out.innerHTML = '<p class="empty">No flip passes these filters right now. Try more cities, more enchant steps, a lower minimum, a longer max data age or a lower grade.</p>'; return }
+  out.innerHTML = `<table class="fliptable"><thead><tr><th>Item</th><th>Route</th><th class="num">Cost</th><th class="num">Sells for</th><th class="num">Profit each</th><th>Grade</th><th class="num">Sold / day</th><th class="num">Amount</th><th class="num">Total</th></tr></thead><tbody>
+    ${res.slice(0, 300).map((r, i) => {
+      const it = r.e.it, sel = flipDetail && flipDetail.id === r.e.id && flipDetail.a === r.a && flipDetail.b === r.b;
+      const matCities = [...new Set(r.buy.mats.map(m => m.city))].filter(c => c !== r.buy.item.city);
+      return `<tr data-i="${i}"${sel ? ' class="sel"' : ""}><td><div class="mat">${icon(priceId(r.e.id, r.b), 32)}<div>${esc(r.e.name)}<span class="age">T${it.t}.${r.a} → T${it.t}.${r.b} · ${r.ups.map(([m, c]) => c + " " + matWord(m)).join(" + ")}</span></div></div></td>
+        <td>${cityShort(r.buy.item.city)} → ${cityShort(r.sellLoc)}${matCities.length ? `<span class="age">${matWord(r.ups[0][0])} from ${matCities.map(cityShort).join(", ")}</span>` : ""}${RED.has(r.sellLoc) || RED.has(r.buy.item.city) ? '<span class="age old">red zone</span>' : ""}</td>
+        <td class="num">${fmt(r.buy.cost)}</td>
+        <td class="num">${fmt(r.sale.v)}<span class="age">${r.sale.flag === "avg" ? "28-day average" : ageText(r.sale.d)?.text || ""}</span></td>
         <td class="num">${signed(r.profit)}<span class="age">${pct(r.margin)}</span></td>
-        <td>${!r.craft ? '<span class="age">not enough prices</span>' : r.craft.cost < r.buy.cost
-          ? `<span class="pos"><b>Craft it</b></span><span class="age">${fmt(r.craft.cost)} to craft · ${signed(r.buy.cost - r.craft.cost)} more profit each</span>`
-          : `Flip it<span class="age">crafting costs ${fmt(r.craft.cost)} (${signed(r.craft.cost - r.buy.cost)} more)</span>`}</td>
-        <td class="num">${fmt(r.h.vol)}</td><td class="num">${r.amount != null ? fmt(r.amount) + `<span class="age">spend ${short(r.amount * r.buy.cost)}</span>` : "—"}</td><td class="num">${r.perDay != null ? signed(r.perDay) : "—"}</td></tr>`;
+        <td>${gradePill(r.grade)}</td>
+        <td class="num">${fmt(r.h.vol)}</td>
+        <td class="num">${r.amount != null ? fmt(r.amount) + `<span class="age">${short(r.amount * r.buy.cost)}</span>` : "—"}</td>
+        <td class="num">${r.total != null ? signed(r.total) : "—"}</td></tr>`;
     }).join("")}</tbody></table>
-    <p class="note" style="padding:0 12px 12px">"Craft instead?" compares crafting the finished item in the city you buy in (materials after your return rate, artifacts and station fee) with buying and enchanting it; crafting needs the right Destiny Board level. * Total profit = profit each × amount. Amount is 20% of daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver; items costing more than that are hidden` : ""}. The lower item is bought at the cheapest sell order (normal or good quality; enchanting keeps the quality). Enchanting is done at the Artifact Foundry. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}. Transport between cities isn't counted.</p>`;
-  out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
+    <p class="note" style="padding:0 12px 12px">Grade A–D: how steady the price is, how fresh the data is, whether it's falling and how complete the sales record is (hover a grade for reasons). Amount is 20% of daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver` : ""}. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}; transport isn't counted. Click a row for the plan.</p>`;
+  out.querySelectorAll("tr[data-i]").forEach(tr => tr.onclick = () => { const r = res[+tr.dataset.i]; openFlip({ id: r.e.id, a: r.a, b: r.b, n: r.amount || 1 }) });
+  if (flipDetail) renderFlipDetail();
+}
+
+// ---------- detail panel ----------
+function openFlip(d) {
+  flipDetail = { pin: {}, ...d };
+  $("x-detail").hidden = false;
+  document.querySelectorAll(".fliptable tr.sel").forEach(t => t.classList.remove("sel"));
+  renderFlipDetail();
+  // Load 28 days of sales for every level of this item in every chosen city, so the whole ladder is checked.
+  const e = DB.list.find(x => x.id === d.id), ids = Object.keys(e.it.r).map(l => priceId(e.id, l));
+  const locs = sellCities().filter(c => !isBM(c));
+  if (locs.length && ids.some(id => locs.some(l => { const h = store.get("h:" + l + "|" + id); return !h || h.dv !== 2 || Date.now() - h.t > 36e5 })))
+    fetchHistory(ids, locs).then(() => { if (flipDetail && flipDetail.id === d.id) renderFlipDetail() }).catch(() => {});
+}
+
+function flipPlan() {
+  const D = flipDetail, e = DB.list.find(x => x.id === D.id), mode = flipMode();
+  const p = flipPaths({ ...e, it: e.it }).find(x => x.a === D.a && x.b === D.b) || (() => {
+    const ups = []; for (let b = +D.a + 1; b <= +D.b; b++) ups.push(e.it.r[String(b)][0].u); return { a: D.a, b: D.b, ups };
+  })();
+  const buy = priceFlip(e, p, mode, D.pin), sell = bestSale(e, p, mode, true, D.pin.sell);
+  return { e, p, buy, sell, mode };
+}
+
+function renderFlipDetail() {
+  const box = $("x-detail"), D = flipDetail;
+  if (!D) { box.hidden = true; return }
+  const { e, p, buy, sell, mode } = flipPlan(), it = e.it, N = Math.max(1, +D.n || 1);
+  const levels = Object.keys(it.r).filter(l => +l <= 3), cities = [...new Set([...buyCities(), ...sellCities()])];
+  const mids = p.ups.map(u => u[0]);
+  // Ladder: every enchant level and upgrade material by city. Click a cell to choose where to buy or sell.
+  const cell = (pid, c, role) => {
+    const isSell = role === "sell", pr = getPrice(c, pid);
+    const v = isSell ? (isBM(c) ? pr && pr.b : (mode.sellBy === "instant" ? pr && pr.b : pr && pr.s)) : pr && pr.s;
+    const h = store.get("h:" + c + "|" + pid), real = isSell && v ? realSale(saleOf(pid, c, mode), h, c) : null;
+    const chosen = role === "buy" ? buy && buy.item.city === c : role === "sell" ? sell && sell.s === c : role && buy && buy.mats.find(m => m.mid === role && m.city === c);
+    const canBuy = !isBM(c) || role === "sell";
+    const a = v && ageText(isSell && (isBM(c) || mode.sellBy === "instant") ? pr.bd : pr.d);
+    const flag = real && real.flag === "troll" ? " old" : "";
+    return `<td class="num lad${chosen ? " pick" : ""}${!canBuy || !v ? " na" : ""}${flag}" ${v && canBuy && role ? `data-role="${role}" data-city="${esc(c)}"` : ""} title="${real && real.flag === "troll" ? "likely troll price" : ""}">${v && canBuy ? fmt(v) : "—"}${v && canBuy ? `<span class="age">${a ? a.text.replace(" ago", "") : ""}${h && h.vol ? " · " + fmt(h.vol) + "/d" : ""}</span>` : ""}</td>`;
+  };
+  let html = `<div class="dhead"><div class="mat">${icon(priceId(e.id, D.b), 48)}<div><h3>${esc(e.name)}</h3><span class="age">T${it.t}.${D.a} → T${it.t}.${D.b}</span></div></div><button class="link" id="xd-close" aria-label="Close">✕</button></div>`;
+  html += `<div class="tablewrap"><table class="ladder"><thead><tr><th></th>${cities.map(c => `<th class="num" title="${esc(c)}">${cityShort(c)}</th>`).join("")}</tr></thead><tbody>
+    ${levels.map(l => `<tr><th>.${l}${l === D.a ? " <small>buy</small>" : l === D.b ? " <small>sell</small>" : ""}</th>${cities.map(c => cell(priceId(e.id, l), c, l === D.a ? "buy" : l === D.b ? "sell" : null)).join("")}</tr>`).join("")}
+    ${mids.map(m => `<tr><th>${esc(matWord(m))}</th>${cities.map(c => cell(m, c, m)).join("")}</tr>`).join("")}
+    </tbody></table></div><p class="note">Click a highlighted row's cell to buy or sell there instead. Shows price · age · sold per day.</p>`;
+  if (!buy || !sell) {
+    html += `<p class="old">${!buy ? "Some prices for the lower item or the runes, souls or relics are missing in these cities." : "No checked sale price for the finished item in these cities yet."} Try more cities or Refresh prices.</p>`;
+    box.innerHTML = html; wireDetail(); return;
+  }
+  const profit = sell.sale.net - buy.cost, grade = flipGrade({ h: sell.h, sale: sell.sale, buy });
+  const owned = mid => Math.max(0, +XF.owned[mid] || 0);
+  const steps = [], lines = [];
+  steps.push(`Buy <b>${N} × T${it.t}.${D.a} ${esc(e.name)}</b> in <b>${esc(buy.item.city)}</b> at up to <b class="mono">${fmt(buy.item.v)}</b> each → ${fmt(N * buy.item.v)}`);
+  lines.push(`${buy.item.city}: ${N} × T${it.t}.${D.a} ${e.name} ≤ ${fmt(buy.item.v)}`);
+  let saved = 0;
+  for (const m of buy.mats) {
+    const need = m.cnt * N, have = Math.min(owned(m.mid), need), get = need - have;
+    saved += have * m.v;
+    steps.push(`Buy <b>${fmt(get)} × ${esc(nameOf(m.mid))}</b> (${m.cnt} per item × ${N}${have ? `, minus ${fmt(have)} you own` : ""}) in <b>${esc(m.city)}</b> at up to <b class="mono">${fmt(m.v)}</b> → ${fmt(get * m.v)}
+      <label class="own">I own <input type="number" min="0" step="1" data-own="${m.mid}" value="${XF.owned[m.mid] || ""}" placeholder="0"></label>`);
+    if (get) lines.push(`${m.city}: ${fmt(get)} × ${nameOf(m.mid)} ≤ ${fmt(m.v)}`);
+  }
+  const places = [...new Set([buy.item.city, ...buy.mats.map(m => m.city)])];
+  if (places.length > 1 || places[0] !== sell.s) steps.push(`Carry everything to the city with the Artifact Foundry you'll use${sell.s !== places[0] ? `, then to <b>${esc(sell.s)}</b> to sell` : ""}${places.some(c => RED.has(c)) || RED.has(sell.s) ? ' <span class="old">(red-zone trip)</span>' : ""}. Transport isn't counted.`);
+  steps.push(`At the <b>Artifact Foundry</b>, enchant one step at a time: ${buy.mats.map((m, i) => `.${+D.a + i}→.${+D.a + i + 1} with ${m.cnt} ${matWord(m.mid)} each`).join(", then ")}. Put in only as many items as you have materials for.`);
+  const listAt = isBM(sell.s) || XF.sellBy === "instant" ? sell.sale.v : Math.max(1, (sell.sale.listed || sell.sale.v) - 1);
+  steps.push(`${isBM(sell.s) || XF.sellBy === "instant" ? "Sell instantly" : "List a sell order"} for <b>${N} × T${it.t}.${D.b}</b> in <b>${esc(sell.s)}</b> at <b class="mono">${fmt(listAt)}</b>${sell.sale.flag === "avg" ? ` <span class="age">counted at its 28-day average ${fmt(sell.sale.v)}</span>` : ""} → you keep <b class="mono">${fmt(N * sell.sale.net)}</b> after fees`);
+  lines.push(`${sell.s}: ${isBM(sell.s) || XF.sellBy === "instant" ? "sell" : "list"} ${N} × T${it.t}.${D.b} ${e.name} @ ${fmt(listAt)}`);
+  const total = N * profit + saved;
+  html += `<div class="dsum">${gradePill(grade)} <span class="big">${signed(profit)}</span> each · <b>${signed(total)}</b> for ${N}${saved ? ` <span class="age">incl. ${fmt(saved)} of materials you own</span>` : ""}
+    <label class="own">Amount <input type="number" min="1" step="1" id="xd-n" value="${N}"></label></div>
+    ${grade.why.length ? `<p class="note">Grade ${grade.g}: ${esc(grade.why.join("; "))}.</p>` : ""}
+    ${sell.h && sell.h.vol ? `<p class="note">About ${fmt(sell.h.vol)} sell a day in ${esc(sell.s)}; ${N} is ${Math.round(N / sell.h.vol * 100)}% of a day's sales${N > sell.h.vol * 0.3 ? ' <span class="old">(more than 30%: it may take several days)</span>' : ""}. Silver needed: <b>${fmt(N * buy.cost - saved)}</b>.</p>` : ""}
+    <h4>Flip plan</h4><ol class="dsteps">${steps.map(s => `<li>${s}</li>`).join("")}</ol>`;
+  // Crafting the finished item instead, with every material amount, in the city the item is bought in.
+  const recs = it.r[D.b], cc = buy.item.city, rr = returnRate(e.id, cc), parts = craftParts(e.id, D.b, cc, mode);
+  let bi = -1;
+  recs.forEach((r, i) => { const c = partCost(parts[i], rr); if (c != null && (bi < 0 || c < partCost(parts[bi], rr))) bi = i });
+  if (bi >= 0) {
+    const r = recs[bi], cost = partCost(parts[bi], rr), crafts = Math.ceil(N / r.n);
+    html += `<h4>Or craft it in ${esc(cc)} <span class="age">${Math.round(rr * 1000) / 10}% return rate</span></h4>
+      <p>${cost < buy.cost ? `<b class="pos">Crafting is ${fmt(buy.cost - cost)} cheaper each</b>` : `Flipping is ${fmt(cost - buy.cost)} cheaper each`} (craft ${fmt(cost)} vs flip ${fmt(buy.cost)}). Needs the Destiny Board level for T${it.t}.</p>
+      <ol class="dsteps">${r.m.map(([mid, cnt, art]) => { const tot = cnt * crafts, buyN = art ? tot : Math.ceil(tot * (1 - rr)), pr = buyOf(cc, mid, mode);
+        return `<li>Buy <b>${fmt(buyN)} × ${esc(nameOf(mid))}</b>${art ? " (never returned)" : ` (${fmt(tot)} used, about ${fmt(tot - buyN)} come back)`}${pr != null ? ` at <b class="mono">${fmt(pr)}</b> → ${fmt(buyN * pr)}` : ""}</li>` }).join("")}
+      <li>Craft <b>${crafts}×</b> at the cheapest station${stationFee(r) ? ` (station fee about ${fmt(stationFee(r) * crafts)})` : ""}, then sell as above.</li></ol>`;
+  }
+  html += `<div class="controls"><button class="primary" id="xd-track">Track this flip</button><button id="xd-copy">Copy shopping list</button><button id="xd-recipe">Open recipe</button></div>`;
+  box.innerHTML = html;
+  box.dataset.list = lines.join("\n");
+  wireDetail({ e, p, buy, sell, N, profit, listAt });
+}
+
+function wireDetail(ctx) {
+  const box = $("x-detail"), D = flipDetail;
+  $("xd-close").onclick = () => { flipDetail = null; box.hidden = true; renderFlips() };
+  box.querySelectorAll("td[data-role]").forEach(td => td.onclick = () => {
+    const role = td.dataset.role, c = td.dataset.city;
+    if (role === "buy") D.pin.buy = c; else if (role === "sell") D.pin.sell = c; else (D.pin.mats ??= {})[role] = c;
+    renderFlipDetail();
+  });
+  if (!ctx) return;
+  $("xd-n").onchange = () => { D.n = Math.max(1, +$("xd-n").value || 1); renderFlipDetail() };
+  box.querySelectorAll("input[data-own]").forEach(inp => inp.onchange = () => { XF.owned[inp.dataset.own] = Math.max(0, +inp.value || 0); saveXF(); renderFlipDetail(); renderTracker() });
+  $("xd-copy").onclick = () => copyText(box.dataset.list, $("xd-copy"));
+  $("xd-recipe").onclick = () => { level = D.b; show("recipes"); open(D.id, true) };
+  $("xd-track").onclick = () => {
+    FT.unshift({ k: Date.now(), id: D.id, a: D.a, b: D.b, n: ctx.N, buyCity: ctx.buy.item.city, sellCity: ctx.sell.s,
+      mats: ctx.buy.mats.map(m => [m.mid, m.cnt, m.city, m.v]), plan: { item: ctx.buy.item.v, cost: ctx.buy.cost, sale: ctx.sell.sale.v, net: ctx.sell.sale.net, listAt: ctx.listAt },
+      paid: null, sold: null, state: "planned", t: { planned: Date.now() } });
+    saveFT(); $("x-tracker").hidden = false; store.set("flipTrackOpen", true); renderTracker();
+    $("xd-track").textContent = "Tracked ✓";
+  };
+}
+function copyText(t, btn) {
+  const done = ok => { if (btn) { const o = btn.textContent; btn.textContent = ok ? "Copied ✓" : "Copy failed"; setTimeout(() => btn.textContent = o, 1500) } };
+  try { navigator.clipboard.writeText(t).then(() => done(true), () => done(false)) } catch { done(false) }
+}
+
+// ---------- tracker ----------
+const FT_STATES = ["planned", "bought", "enchanted", "listed", "sold"];
+const FT_NEXT = { planned: "Mark bought", bought: "Mark enchanted", enchanted: "Mark listed", listed: "Mark sold" };
+function trackerNumbers(f) {
+  const feeKeep = f.plan.sale ? f.plan.net / f.plan.sale : 1 - TAX() - SETUP;
+  const cost = (f.paid ?? f.plan.cost);
+  const soldNet = f.sold != null ? f.sold * feeKeep : null;
+  const pid = priceId(f.id, f.b), now = getPrice(f.sellCity, pid);
+  const nowV = now ? (isBM(f.sellCity) ? now.b : now.s) : null;
+  return { cost, expected: f.n * (f.plan.net - f.plan.cost), actual: soldNet != null ? f.n * (soldNet - cost) : null, nowV, nowD: now && (isBM(f.sellCity) ? now.bd : now.d) };
+}
+function renderTracker() {
+  const box = $("x-tracker");
+  if (!box) return;
+  const btn = $("x-tracker-toggle");
+  const active = FT.filter(f => f.state !== "sold" && !f.archived), done = FT.filter(f => f.state === "sold");
+  const realised = done.reduce((s, f) => s + (trackerNumbers(f).actual ?? 0), 0);
+  if (btn) btn.textContent = `Tracker (${active.length})`;
+  if (box.hidden) return;
+  // Combined shopping list for everything still to buy, minus materials you own.
+  const shop = {}, ownLeft = { ...XF.owned };
+  for (const f of FT.filter(f => f.state === "planned")) {
+    const e = DB.items[f.id];
+    (shop[f.buyCity] ??= []).push([`T${e.t}.${f.a} ${nameOf(f.id)}`, f.n, f.plan.item]);
+    for (const [mid, cnt, city, v] of f.mats) {
+      let need = cnt * f.n; const use = Math.min(need, +ownLeft[mid] || 0); ownLeft[mid] = (+ownLeft[mid] || 0) - use; need -= use;
+      if (need) (shop[city] ??= []).push([nameOf(mid), need, v]);
+    }
+  }
+  const merged = Object.fromEntries(Object.entries(shop).map(([c, xs]) => { const m = {}; for (const [n, q, v] of xs) { m[n] ??= [0, v]; m[n][0] += q; m[n][1] = Math.max(m[n][1], v) } return [c, m] }));
+  const shopText = Object.entries(merged).map(([c, m]) => c + ": " + Object.entries(m).map(([n, [q, v]]) => `${fmt(q)} × ${n} ≤ ${fmt(v)}`).join(", ")).join("\n");
+  let html = `<div class="dhead"><h3>Tracker</h3><div class="controls"><button id="xt-reprice">Re-check prices</button>${shopText ? '<button id="xt-copy">Copy shopping list</button>' : ""}<button id="xt-export">Export</button><button id="xt-import">Import</button></div></div>
+    <p class="note">${active.length} in progress · expected ${signed(active.reduce((s, f) => s + trackerNumbers(f).expected, 0))} · realised so far ${signed(realised)} from ${done.length} sold flips.</p>`;
+  if (shopText) html += `<details class="more" open><summary>Shopping list for planned flips${Object.values(XF.owned).some(x => +x) ? " (minus what you own)" : ""}</summary><pre class="shop">${esc(shopText)}</pre></details>`;
+  if (!FT.length) html += `<p class="empty">Nothing tracked yet. Open a flip and press "Track this flip".</p>`;
+  html += `<div class="tcards">${FT.filter(f => !f.archived).map(f => {
+    const e = DB.items[f.id], nb = trackerNumbers(f), i = FT.indexOf(f);
+    const relist = f.state === "listed" && nb.nowV && nb.nowV < (f.plan.listAt || f.plan.sale);
+    const listedFor = f.state === "listed" && f.t.listed ? ` · listed ${Math.round((Date.now() - f.t.listed) / 36e5)} h ago` : "";
+    return `<div class="tcard s-${f.state}" data-i="${i}"><div class="mat">${icon(priceId(f.id, f.b), 32)}<div><b>${f.n} × ${esc(nameOf(f.id))}</b><span class="age">T${e.t}.${f.a} → T${e.t}.${f.b} · ${cityShort(f.buyCity)} → ${cityShort(f.sellCity)}</span></div></div>
+      <div class="tstate">${FT_STATES.map(s => `<span class="${FT_STATES.indexOf(s) <= FT_STATES.indexOf(f.state) ? "on" : ""}">${s}</span>`).join("")}</div>
+      <div class="tnums">Plan: cost ${fmt(f.plan.cost)} · sell ${fmt(f.plan.sale)} · <b>${signed(nb.expected)}</b>${nb.actual != null ? ` · actual <b>${signed(nb.actual)}</b>` : ""}</div>
+      <div class="tnums">Now in ${esc(f.sellCity)}: ${nb.nowV ? fmt(nb.nowV) + (nb.nowD ? ` (${ageText(nb.nowD)?.text || ""})` : "") : "—"}${listedFor}${relist ? ' <span class="old">· undercut: someone lists cheaper, relist?</span>' : ""}</div>
+      <div class="controls">
+        <label class="own">Paid each <input type="number" data-k="paid" value="${f.paid ?? ""}" placeholder="${Math.round(f.plan.cost)}"></label>
+        <label class="own">Sold at <input type="number" data-k="sold" value="${f.sold ?? ""}" placeholder="${Math.round(f.plan.sale)}"></label>
+        ${FT_NEXT[f.state] ? `<button class="primary" data-act="next">${FT_NEXT[f.state]}</button>` : ""}
+        <button data-act="open">Plan</button><button data-act="dup">Again</button><button data-act="${f.state === "sold" ? "archive" : "del"}">${f.state === "sold" ? "Archive" : "Remove"}</button>
+      </div></div>`;
+  }).join("")}</div>`;
+  box.innerHTML = html;
+  box.querySelectorAll(".tcard").forEach(card => {
+    const f = FT[+card.dataset.i];
+    card.querySelectorAll("input[data-k]").forEach(inp => inp.onchange = () => { f[inp.dataset.k] = inp.value === "" ? null : +inp.value; saveFT(); renderTracker() });
+    card.querySelectorAll("button[data-act]").forEach(b => b.onclick = () => {
+      const a = b.dataset.act;
+      if (a === "next") { f.state = FT_STATES[FT_STATES.indexOf(f.state) + 1]; f.t[f.state] = Date.now(); if (f.state === "sold" && f.sold == null) f.sold = f.plan.sale }
+      else if (a === "del") { if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Sure?"; return } FT.splice(FT.indexOf(f), 1) }
+      else if (a === "archive") f.archived = true;
+      else if (a === "dup") FT.unshift({ ...structuredClone(f), k: Date.now(), paid: null, sold: null, archived: false, state: "planned", t: { planned: Date.now() } });
+      else if (a === "open") { openFlip({ id: f.id, a: f.a, b: f.b, n: f.n, pin: { buy: f.buyCity, sell: f.sellCity, mats: Object.fromEntries(f.mats.map(m => [m[0], m[2]])) } }); $("x-detail").scrollIntoView({ behavior: "smooth", block: "start" }); return }
+      saveFT(); renderTracker();
+    });
+  });
+  const rp = $("xt-reprice");
+  if (rp) rp.onclick = async () => {
+    rp.disabled = true; rp.textContent = "Checking…";
+    const by = {};
+    for (const f of FT.filter(f => !f.archived && f.state !== "sold")) (by[f.sellCity] ??= new Set()).add(priceId(f.id, f.b));
+    try { for (const [loc, ids] of Object.entries(by)) await fetchPrices([...ids], [loc], null, { persist: false, force: true }) } catch {}
+    renderTracker();
+  };
+  if ($("xt-copy")) $("xt-copy").onclick = () => copyText(shopText, $("xt-copy"));
+  $("xt-export").onclick = () => copyText(JSON.stringify(FT), $("xt-export"));
+  $("xt-import").onclick = () => {
+    const t = prompt("Paste a tracker export:");
+    if (!t) return;
+    try { const arr = JSON.parse(t); if (Array.isArray(arr)) { FT = arr; saveFT(); renderTracker() } } catch { alert("That doesn't look like a tracker export.") }
+  };
 }
 
 // Settings bar.
