@@ -650,6 +650,8 @@ if (!S.v) { S.rr = "auto"; S.v = 2 }
 
 function cityBonus(id, city) { return (CITY_BONUS[isBM(city) ? "Caerleon" : city] || {})[DB.items[id].k] || 0 }
 function returnRate(id, city) {
+  // Artifacts (made at the Artifact Foundry or the Energy Manipulator) give nothing back.
+  if (DB.items[id] && DB.items[id].c === "artefacts") return 0;
   if (S.rr !== "auto") return +S.rr / 100;
   const k = DB.items[id].k, daily = +S.daily && (!S.dailyCat || S.dailyCat === k) ? +S.daily : 0;
   return 1 - 1 / (1 + 0.18 + cityBonus(id, city) + (S.focus ? FOCUS_BONUS : 0) + daily);
