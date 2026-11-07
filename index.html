@@ -1240,9 +1240,10 @@ function setupFinder() {
     subEl.disabled = !F.cat; subEl.value = subs.includes(F.sub) ? F.sub : "";
   };
   catEl.value = F.cat; fillSub();
-  catEl.onchange = () => { F.cat = catEl.value; F.sub = ""; fillSub(); saveF() };
-  subEl.onchange = () => { F.sub = subEl.value; saveF() };
-  $("f-name").value = F.name; $("f-name").oninput = () => { F.name = $("f-name").value; saveF() };
+  catEl.onchange = () => { F.cat = catEl.value; F.sub = ""; fillSub(); saveF(); renderFinder() };
+  subEl.onchange = () => { F.sub = subEl.value; saveF(); renderFinder() };
+  $("f-name").value = F.name; $("f-name").oninput = () => { F.name = $("f-name").value; saveF(); renderFinder() };
+  $("f-tier").dataset.live = $("f-ench").dataset.live = 1;
   chips($("f-tier"), [1, 2, 3, 4, 5, 6, 7, 8].map(t => [String(t), "T" + t]), "tier", false);
   chips($("f-ench"), [0, 1, 2, 3, 4].map(l => [String(l), "." + l]), "ench", false);
   chips($("f-buy"), CITIES.map(c => [c, c]), "buy", true);
@@ -1323,7 +1324,7 @@ function finderResults(sortKey, quick) {
   const num = (v, d) => v === "" || v == null || isNaN(+v) ? d : +v;
   const minProfit = num(F.minProfit, -Infinity), minTotal = num(F.minTotal, 0), minM = num(F.minMargin, -Infinity) / 100, maxM = num(F.maxMargin, Infinity) / 100;
   const minVol = num(F.minVol, 0), maxItems = num(F.maxItems, 0), budget = num(F.budget, 0);
-  for (const r of scan.rows) {
+  for (const r of finderItems()) {
     let e = bestRoute(r.id, r.l, scan.buy, scan.sell, o);
     if (!e) continue;
     const h = store.get("h:" + e.sellLoc + "|" + priceId(r.id, r.l));
@@ -1356,7 +1357,7 @@ function renderFinder() {
   if (!scan) { out.innerHTML = ""; return }
   const res = finderResults(), good = res.filter(r => r.e.margin >= 0.2).length;
   const total = res.slice(0, 200).reduce((s, r) => s + (r.total > 0 ? r.total : 0), 0);
-  n.textContent = `${res.length.toLocaleString("en-US")} profitable crafts from ${scan.rows.length.toLocaleString("en-US")} item variants. ${good.toLocaleString("en-US")} make 20% or more.${res.length > 200 ? " Showing the top 200." : ""} Click a row for the full recipe.`;
+  n.textContent = `${res.length.toLocaleString("en-US")} profitable crafts from ${finderItems().length.toLocaleString("en-US")} item variants. ${good.toLocaleString("en-US")} make 20% or more.${res.length > 200 ? " Showing the top 200." : ""} Click a row for the full recipe.`;
   if (!res.length) { out.innerHTML = '<p class="empty">Nothing passes these filters. Try more cities, a longer max data age, or a lower minimum profit or margin.</p>'; return }
   out.innerHTML = `<table><thead><tr><th>Item</th><th>Route</th><th class="num">Cost each</th><th class="num">Sells for</th><th class="num">Profit each</th><th class="num">Amount</th><th class="num">Total</th><th class="num">Sold / day</th></tr></thead><tbody>
     ${res.slice(0, 200).map(r => {
@@ -1565,7 +1566,7 @@ const hoursOld = d => d ? (Date.now() - new Date(d + (d.endsWith("Z") ? "" : "Z"
 
 function setupFlips() {
   $("x-cat").innerHTML = '<option value="">All gear</option>' + FLIP_CATS.map(c => `<option value="${c}">${pretty(c)}</option>`).join("");
-  for (const [id, key, live] of [["x-q", "q"], ["x-cat", "cat"], ["x-tier", "tier"], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-vol", "vol", 1],
+  for (const [id, key, live] of [["x-q", "q", 1], ["x-cat", "cat", 1], ["x-tier", "tier", 1], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-vol", "vol", 1],
     ["x-minprofit", "minProfit", 1], ["x-minmargin", "minMargin", 1], ["x-age", "age", 1], ["x-sort", "sort", 1], ["x-budget", "budget", 1], ["x-grade", "grade", 1]]) {
     const el = $(id);
     el.value = XF[key];
@@ -1701,7 +1702,8 @@ function flipResults(raw) {
   const mode = flipMode(), out = [];
   const minProfit = XF.minProfit === "" ? -Infinity : +XF.minProfit, minM = XF.minMargin === "" ? -Infinity : +XF.minMargin / 100;
   const budget = +XF.budget || 0, gradeOk = { A: "A", B: "AB", C: "ABC", D: "ABCD" }[XF.grade || "D"];
-  for (const e of flipScan.items) for (const p of flipPaths(e)) {
+  // Uses the filters as they are now, over whatever prices are loaded; items never scanned simply have no prices yet.
+  for (const e of flipItems()) for (const p of flipPaths(e)) {
     const buy = priceFlip(e, p, mode);
     if (!buy) continue;
     const sell = bestSale(e, p, mode, raw);
@@ -1729,7 +1731,8 @@ function renderFlips() {
   renderTracker();
   if (!flipScan) { out.innerHTML = ""; return }
   const res = flipResCache = flipResults();
-  n.textContent = `${res.length} profitable flips, checked against real sales, that sell at least ${+XF.vol || 0} a day${+XF.budget ? ` and cost under ${short(+XF.budget)} each` : ""}, using ${XF.cities.join(", ")}.`;
+  const unscanned = flipItems().filter(e => !flipScan.items.includes(e)).length;
+  n.textContent = `${res.length} profitable flips, checked against real sales, that sell at least ${+XF.vol || 0} a day${+XF.budget ? ` and cost under ${short(+XF.budget)} each` : ""}, using ${XF.cities.join(", ")}.${unscanned ? ` ${unscanned} matching items weren't in the last scan; press Scan to load their prices.` : ""}`;
   if (!res.length) { out.innerHTML = '<p class="empty">No flip passes these filters right now. Try more cities, more enchant steps, a lower minimum, a longer max data age or a lower grade.</p>'; return }
   out.innerHTML = `<table class="fliptable"><thead><tr><th>Item</th><th>Route</th><th class="num">Cost</th><th class="num">Sells for</th><th class="num">Profit each</th><th>Grade</th><th class="num">Sold / day</th><th class="num">Amount</th><th class="num">Total</th></tr></thead><tbody>
     ${res.slice(0, 300).map((r, i) => {
