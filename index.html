@@ -231,6 +231,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   </span>
   <label><input type="checkbox" id="s-prem"> Premium (4% tax instead of 8%)</label>
   <label title="The usage fee a station shows when you right-click it on the city map (N). A craft uses item value × 0.1125 nutrition.">Station fee per 100 nutrition <input id="s-fee" type="number" min="0" step="50" inputmode="numeric" placeholder="0"></label>
+  <label title="Prices loaded within this many minutes are reused by every scan, even after a reload. Refresh prices loads them again.">Reuse prices for <input id="s-cache" type="number" min="0" step="5" inputmode="numeric"> min</label>
 </div>
 
 <section id="view-finder" class="finder" hidden>
@@ -265,6 +266,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   </div>
   <div class="controls">
     <button class="primary" id="f-scan">Scan prices</button>
+    <button id="f-refresh" title="Load every price again instead of reusing recent ones">Refresh prices</button>
     <button id="f-reset">Reset all</button>
     <div class="fld inline">Sort by<div class="chips" id="f-sortby"></div></div>
   </div>
@@ -312,8 +314,9 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
     <label class="fld">Min profit each<input id="x-minprofit" type="number" step="500"></label>
     <label class="fld">Min margin %<input id="x-minmargin" type="number" step="5"></label>
     <label class="fld">Max data age (h)<input id="x-age" type="number" min="0" step="1"></label>
+    <label class="fld">Silver to spend (0 = no limit)<input id="x-budget" type="number" min="0" step="100000" placeholder="e.g. 2000000"></label>
   </div>
-  <div class="controls"><button class="primary" id="x-scan">Scan prices</button><label class="chk">Sort by <select id="x-sort"><option value="day">Profit per day</option><option value="profit">Profit each</option><option value="margin">Margin</option></select></label></div>
+  <div class="controls"><button class="primary" id="x-scan">Scan prices</button><button id="x-refresh" title="Load every price again instead of reusing recent ones">Refresh prices</button><label class="chk">Sort by <select id="x-sort"><option value="day">Total profit</option><option value="profit">Profit each</option><option value="margin">Margin</option></select></label></div>
   <p class="note" id="x-note">Pick your filters and press Scan. A full scan of every tier takes about a minute.</p>
   <div class="card"><div class="tablewrap" id="x-out"></div></div>
 </section>
@@ -589,7 +592,7 @@ const CITY_BONUS = {
 const FOCUS_BONUS = 0.59;
 
 // Profit settings, shared by the recipe card and the profit finder. rr is "auto" (city bonuses) or a fixed percentage.
-const S = Object.assign({ rr: "auto", focus: false, daily: 0, dailyCat: "", premium: false, fee: 0 }, store.get("settings") || {});
+const S = Object.assign({ rr: "auto", focus: false, daily: 0, dailyCat: "", premium: false, fee: 0, cacheMin: 30 }, store.get("settings") || {});
 if (!S.v) { S.rr = "auto"; S.v = 2 }
 
 function cityBonus(id, city) { return (CITY_BONUS[isBM(city) ? "Caerleon" : city] || {})[DB.items[id].k] || 0 }
@@ -882,10 +885,57 @@ function parseJsonArray(payload) {
   return JSON.parse(text.slice(a, b + 1));
 }
 
+// Price cache: every price loaded is kept in memory and saved in the browser's IndexedDB (localStorage is far too
+// small for a full scan), so scans and reloads reuse anything loaded in the last S.cacheMin minutes.
+const FETCHED = new Map();
+const cacheMinutes = () => Math.max(0, +S.cacheMin || 0);
+let priceDb = null;
+function openPriceDb() {
+  return priceDb ??= new Promise(res => {
+    try {
+      const r = indexedDB.open("albion-recipe-book", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("prices");
+      r.onsuccess = () => res(r.result);
+      r.onerror = r.onblocked = () => res(null);
+    } catch { res(null) }
+  });
+}
+// Load saved prices into memory at start-up and drop ones older than 12 hours.
+const priceCacheReady = (async () => {
+  const db = await openPriceDb();
+  if (!db) return;
+  await new Promise(res => {
+    try {
+      const cut = Date.now() - 12 * 36e5, req = db.transaction("prices", "readwrite").objectStore("prices").openCursor();
+      req.onsuccess = () => {
+        const c = req.result;
+        if (!c) return res();
+        if (c.value.t < cut) c.delete();
+        else if (!FETCHED.has(c.key) || FETCHED.get(c.key) < c.value.t) { PRICES.set(c.key, c.value.v); FETCHED.set(c.key, c.value.t) }
+        c.continue();
+      };
+      req.onerror = () => res();
+    } catch { res() }
+  });
+})();
+async function savePrices(entries) {
+  const db = await openPriceDb();
+  if (!db) return;
+  try { const st = db.transaction("prices", "readwrite").objectStore("prices"); for (const [k, v, t] of entries) st.put({ v, t }, k) } catch {}
+}
+// The ids that still need loading: not loaded for every market within the cache time.
+function staleIds(ids, locs) {
+  const cut = Date.now() - cacheMinutes() * 6e4;
+  return ids.filter(id => locs.some(l => (FETCHED.get(l + "|" + id) || 0) <= cut));
+}
+
 // Fetches prices for many ids in as few requests as the URL length allows, and caches them per market.
 // persist: also cache to localStorage (recipe card). qualities: limit rows, e.g. "1" for materials, to keep big scans small.
-const FETCHED = new Map();
-async function fetchPrices(ids, locs, onStep, { persist = true, qualities = "" } = {}) {
+// force: ignore the cache and load everything again.
+async function fetchPrices(ids, locs, onStep, { persist = true, qualities = "", force = false } = {}) {
+  await priceCacheReady;
+  if (!force) ids = staleIds(ids, locs);
+  if (!ids.length) return {};
   const chunks = [[]];
   let len = 0;
   for (const id of ids) {
@@ -914,12 +964,13 @@ async function fetchPrices(ids, locs, onStep, { persist = true, qualities = "" }
       if (row.quality === 1 && row.buy_price_max > 0) Object.assign(e, { b: row.buy_price_max, bd: row.buy_price_max_date });
     }
   }
-  const now = Date.now();
+  const now = Date.now(), saved = [];
   for (const loc of locs) for (const id of ids) {
     const k = loc + "|" + id, v = best[k] || null;
-    PRICES.set(k, v); FETCHED.set(k, now);
+    PRICES.set(k, v); FETCHED.set(k, now); saved.push([k, v, now]);
     if (persist) store.set("p:" + k, v);
   }
+  savePrices(saved);
   return best;
 }
 
@@ -1002,14 +1053,15 @@ function compareHtml() {
   html += `<p class="note">Each row buys the materials in that city at the cheapest sell order and sells with a sell order there (the Black Market: into its buy order), using your return rate and fee settings. Sale prices are checked against 28 days of real sales in each city: a listing above the average counts at the average, and likely troll prices (over double the usual) or items nobody bought are left out. A dash means nobody has the item or one of its materials listed in that city right now. Prices loaded ${Math.max(1, Math.round((Date.now() - t) / 6e4))} min ago. <button class="link" id="cmp-go">Refresh</button></p></section>`;
   return html;
 }
-async function loadCompare() {
+async function loadCompare(ev) {
+  const force = !!(ev && ev.target && ev.target.classList.contains("link"));
   const recs = DB.items[current].r[level], pid = priceId(current, level);
   const ids = new Set([pid]);
   recs.forEach(r => r.m.forEach(m => ids.add(m[0])));
   if (recs[0].u && level !== "0") { ids.add(priceId(current, String(level - 1))); ids.add(recs[0].u[0]) }
   const btn = $("cmp-go"); if (btn) { btn.disabled = true; btn.textContent = "Loading every city…" }
   try {
-    await fetchPrices([...ids], [...CITIES, "Black Market"], (i, t, wait) => { if (wait && btn) btn.textContent = "The price server asked us to slow down. Waiting…" }, { persist: false });
+    await fetchPrices([...ids], [...CITIES, "Black Market"], (i, t, wait) => { if (wait && btn) btn.textContent = "The price server asked us to slow down. Waiting…" }, { persist: false, force });
     if (btn) btn.textContent = "Checking real sales…";
     await fetchHistory([pid], CITIES).catch(() => {});
     CMP.set(cmpKey(), Date.now());
@@ -1031,13 +1083,13 @@ async function loadPrices(force) {
   const btn = $("load"); if (btn) btn.disabled = true;
   note("Loading " + locs.join(" and ") + " prices…");
   try {
-    const best = await fetchPrices([...new Set(ids)], locs);
+    await fetchPrices([...new Set(ids)], locs, null, { force });
     const h = store.get("h:" + city + "|" + pid);
     if (force || !h || h.lq !== 1 || Date.now() - h.t > 60 * 60 * 1000) await fetchHistory([pid], city).catch(() => {});
     store.set("f:" + key, Date.now());
     if (mine !== loading) return;
     renderCard();
-    const got = Object.values(best).filter(e => e.s || e.b).length;
+    const got = locs.flatMap(l => ids.map(id => getPrice(l, id))).filter(e => e && (e.s || e.b)).length;
     note(got ? `Prices updated. A dash means nobody in ${matLoc()} is selling it right now.` : `No orders found in ${locs.join(" or ")} for these items.`, !got);
   } catch (e) {
     if (mine !== loading) return;
@@ -1109,7 +1161,8 @@ function setupFinder() {
   }
   $("f-check").checked = F.check; $("f-check").onchange = () => { F.check = $("f-check").checked; saveF(); renderFinder() };
   $("f-reset").onclick = () => { F = { ...F_DEFAULT }; saveF(); setupFinder(); renderFinder() };
-  $("f-scan").onclick = runScan;
+  $("f-scan").onclick = () => runScan(false);
+  $("f-refresh").onclick = () => runScan(true);
 }
 
 function finderItems() {
@@ -1125,7 +1178,8 @@ function finderItems() {
 }
 const scanMode = () => ({ buyBy: F.buyBy, sellBy: F.sellBy, ok: +F.age > 0 ? d => { const a = ageText(d); return !a || (Date.now() - new Date(d + "Z").getTime()) / 36e5 <= +F.age } : anyPrice });
 
-async function runScan() {
+async function runScan(force) {
+  force = force === true;
   const rows = finderItems(), btn = $("f-scan"), n = $("f-note");
   if (!rows.length) { n.textContent = "No craftable items match these filters."; return }
   const locs = [...new Set([...F.buy, ...F.sell])];
@@ -1137,14 +1191,13 @@ async function runScan() {
     if (recs[0].u && l !== "0") { mats.add(priceId(id, String(l - 1))); mats.add(recs[0].u[0]) }
   }
   // Skip what was fetched for these markets in the last 10 minutes, so changing filters and re-scanning costs nothing.
-  const stale = id => locs.some(loc => !(Date.now() - (FETCHED.get(loc + "|" + id) || 0) < 6e5));
-  const needP = [...products].filter(stale), needM = [...mats].filter(id => !products.has(id) && stale(id));
+  const needP = [...products], needM = [...mats].filter(id => !products.has(id));
   btn.disabled = true;
   const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
   try {
     // Products at normal and good quality (what a fresh craft is), materials at normal quality only: a fraction of the data.
-    if (needM.length) await fetchPrices(needM, locs, step("material prices"), { persist: false, qualities: "1" });
-    if (needP.length) await fetchPrices(needP, locs, step("item prices"), { persist: false, qualities: "1,2" });
+    await fetchPrices(needM, locs, step("material prices"), { persist: false, qualities: "1", force });
+    await fetchPrices(needP, locs, step("item prices"), { persist: false, qualities: "1,2", force });
     scan = { rows, buy: [...F.buy], sell: [...F.sell] };
     renderFinder();
     // Check the top of the list against 28 days of real sales: troll listings and items nobody buys drop out, the next
@@ -1395,7 +1448,7 @@ async function fillMats(replace) {
 }
 
 // Enchant flips: buy an item at a lower enchantment, upgrade it with runes, souls or relics, and sell it.
-let XF = Object.assign({ q: "", cat: "", tier: "", buy: "Fort Sterling", sell: "", steps: "3", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10, age: 24, sort: "day" }, store.get("flips") || {});
+let XF = Object.assign({ q: "", cat: "", tier: "", buy: "Fort Sterling", sell: "", steps: "3", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10, age: 24, sort: "day", budget: 0 }, store.get("flips") || {});
 let flipScan = null;
 const saveXF = () => store.set("flips", XF);
 const FLIP_CATS = ["weapons", "head", "armors", "shoes", "offhands", "capes", "bags", "gathering"];
@@ -1405,12 +1458,13 @@ function setupFlips() {
   $("x-cat").innerHTML = '<option value="">All gear</option>' + FLIP_CATS.map(c => `<option value="${c}">${pretty(c)}</option>`).join("");
   $("x-buy").innerHTML = '<option value="*">Cheapest of all cities</option>' + CITIES.map(c => `<option>${c}</option>`).join("");
   $("x-sell").innerHTML = '<option value="">Same city as I buy in</option><option value="*">Best of all cities</option>' + SELL_MARKETS.map(c => `<option>${c}</option>`).join("");
-  for (const [id, key, live] of [["x-q", "q"], ["x-cat", "cat"], ["x-tier", "tier"], ["x-buy", "buy"], ["x-sell", "sell"], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-vol", "vol", 1], ["x-minprofit", "minProfit", 1], ["x-minmargin", "minMargin", 1], ["x-age", "age", 1], ["x-sort", "sort", 1]]) {
+  for (const [id, key, live] of [["x-q", "q"], ["x-cat", "cat"], ["x-tier", "tier"], ["x-buy", "buy"], ["x-sell", "sell"], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-vol", "vol", 1], ["x-minprofit", "minProfit", 1], ["x-minmargin", "minMargin", 1], ["x-age", "age", 1], ["x-sort", "sort", 1], ["x-budget", "budget", 1]]) {
     const el = $(id);
     el.value = XF[key];
     el[el.tagName === "SELECT" ? "onchange" : "oninput"] = () => { XF[key] = el.value; saveXF(); if (live) renderFlips() };
   }
-  $("x-scan").onclick = scanFlips;
+  $("x-scan").onclick = () => scanFlips(false);
+  $("x-refresh").onclick = () => scanFlips(true);
 }
 
 const flipMarkets = () => {
@@ -1441,7 +1495,8 @@ function flipPaths(e) {
   return out;
 }
 
-async function scanFlips() {
+async function scanFlips(force) {
+  force = force === true;
   const items = flipItems(), n = $("x-note"), btn = $("x-scan");
   if (!items.length) { n.textContent = "No enchantable items match these filters."; return }
   const m = flipMarkets(), locs = [...new Set([...m.buy, ...(m.sell || m.buy)])];
@@ -1450,8 +1505,8 @@ async function scanFlips() {
   btn.disabled = true;
   const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
   try {
-    await fetchPrices([...mats], locs, step("rune, soul and relic prices"), { persist: false, qualities: "1" });
-    await fetchPrices([...products], locs, step("item prices"), { persist: false, qualities: "1,2" });
+    await fetchPrices([...mats], locs, step("rune, soul and relic prices"), { persist: false, qualities: "1", force });
+    await fetchPrices([...products], locs, step("item prices"), { persist: false, qualities: "1,2", force });
     flipScan = { items, m };
     renderFlips();
     // Check the most promising flips against 28 days of real sales in the city they sell in, a batch at a time.
@@ -1502,7 +1557,13 @@ function flipResults(raw) {
     if (!sell) continue;
     const profit = sell.sale.net - best.cost, margin = best.cost > 0 ? profit / best.cost : null;
     if (!raw && (profit < minProfit || margin < minM)) continue;
-    out.push({ e, ...p, buy: best, sellLoc: sell.s, sale: sell.sale, h: sell.h, profit, margin, perDay: sell.h ? profit * sell.h.vol * 0.25 : null });
+    // How many to flip: 25% of daily sales, and no more than your silver covers. Items you can't afford even once drop out.
+    const budget = +XF.budget || 0;
+    if (!raw && budget > 0 && best.cost > budget) continue;
+    let amount = sell.h && sell.h.vol ? Math.max(1, Math.floor(sell.h.vol * 0.25)) : null;
+    if (budget > 0) amount = Math.min(amount ?? Infinity, Math.floor(budget / best.cost));
+    if (amount === Infinity) amount = null;
+    out.push({ e, ...p, buy: best, sellLoc: sell.s, sale: sell.sale, h: sell.h, profit, margin, amount, perDay: amount != null ? profit * amount : null });
   }
   const k = raw ? "profit" : XF.sort, v = r => k === "margin" ? r.margin : k === "profit" ? r.profit : (r.perDay ?? -Infinity);
   return out.sort((a, b) => v(b) - v(a) || b.profit - a.profit);
@@ -1512,10 +1573,10 @@ function renderFlips() {
   const out = $("x-out"), n = $("x-note");
   if (!flipScan) { out.innerHTML = ""; return }
   const res = flipResults(), checked = flipResults(true).filter(r => r.h && r.h.lq === 1).length;
-  n.textContent = `${res.length} profitable flips that sell at least ${+XF.vol || 0} a day, out of ${checked} checked against real sales. Click a row for the item's recipe.`;
+  n.textContent = `${res.length} profitable flips that sell at least ${+XF.vol || 0} a day${+XF.budget ? ` and cost under ${short(+XF.budget)} each` : ""}, out of ${checked} checked against real sales. Click a row for the item's recipe.`;
   if (!res.length) { out.innerHTML = '<p class="empty">No flip passes these filters right now. Try more cities, more enchant steps, a lower minimum, or a longer max data age.</p>'; return }
   const ench = { RUNE: "runes", SOUL: "souls", RELIC: "relics" };
-  out.innerHTML = `<table><thead><tr><th>Item</th><th>Buy</th><th>Enchant with</th><th>Sell</th><th class="num">Profit each</th><th class="num">Sold / day</th><th class="num">Profit / day*</th></tr></thead><tbody>
+  out.innerHTML = `<table><thead><tr><th>Item</th><th>Buy</th><th>Enchant with</th><th>Sell</th><th class="num">Profit each</th><th class="num">Sold / day</th><th class="num">Amount</th><th class="num">Total profit*</th></tr></thead><tbody>
     ${res.slice(0, 300).map(r => {
       const ab = ageText(r.sale.d), it = r.e.it;
       return `<tr data-open="${r.e.id}" data-l="${r.b}"><td><div class="mat">${icon(priceId(r.e.id, r.b), 32)}<div>${esc(r.e.name)}<span class="age">T${it.t}.${r.a} → T${it.t}.${r.b}</span></div></div></td>
@@ -1523,9 +1584,9 @@ function renderFlips() {
         <td>${r.ups.map(([mid, cnt]) => `${cnt} ${ench[mid.split("_")[1]] || nameOf(mid)}`).join(" + ")}<span class="age">${fmt(r.buy.up)} · total cost ${fmt(r.buy.cost)}</span></td>
         <td class="num">${fmt(r.sale.v)}<span class="age">.${r.b} in ${esc(r.sellLoc)}${r.sale.flag === "avg" ? " · 28-day average" : ab ? " · " + ab.text : ""}</span></td>
         <td class="num">${signed(r.profit)}<span class="age">${pct(r.margin)}</span></td>
-        <td class="num">${fmt(r.h.vol)}</td><td class="num">${r.perDay != null ? signed(r.perDay) : "—"}</td></tr>`;
+        <td class="num">${fmt(r.h.vol)}</td><td class="num">${r.amount != null ? fmt(r.amount) + `<span class="age">spend ${short(r.amount * r.buy.cost)}</span>` : "—"}</td><td class="num">${r.perDay != null ? signed(r.perDay) : "—"}</td></tr>`;
     }).join("")}</tbody></table>
-    <p class="note" style="padding:0 12px 12px">* Profit per day assumes you flip 25% of daily sales. The lower item is bought at the cheapest sell order (normal or good quality; enchanting keeps the quality). Enchanting is done at the Artifact Foundry. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}. Transport between cities isn't counted.</p>`;
+    <p class="note" style="padding:0 12px 12px">* Total profit = profit each × amount. Amount is 25% of daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver; items costing more than that are hidden` : ""}. The lower item is bought at the cheapest sell order (normal or good quality; enchanting keeps the quality). Enchanting is done at the Artifact Foundry. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}. Transport between cities isn't counted.</p>`;
   out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
 }
 
@@ -1548,6 +1609,8 @@ function setupSettings() {
   };
   ["s-rr", "s-focus", "s-daily", "s-dailycat", "s-prem"].forEach(id => $(id).onchange = save);
   $("s-fee").oninput = save;
+  $("s-cache").value = S.cacheMin ?? 30;
+  $("s-cache").oninput = () => { S.cacheMin = Math.max(0, +$("s-cache").value || 0); store.set("settings", S) };
   sync();
 }
 
