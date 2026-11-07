@@ -786,7 +786,7 @@ function profitHtml() {
     ${e.opts.map(o => `<tr${o === e.best && e.opts.length > 1 ? ' class="best"' : ""}><td>${esc(o.label)}${o === e.best && e.opts.length > 1 ? ' <span class="pill good">cheapest</span>' : ""}</td><td class="num">${fmt(o.cost)}</td><td class="num">${o.cost != null && e.net != null ? signed(e.net - o.cost) : "—"}</td></tr>`).join("")}
     </tbody></table></div><ul>`;
   html += `<li>Real cost = materials × ${Math.round((1 - e.rr) * 1000) / 10}% (a ${Math.round(e.rr * 1000) / 10}% return rate${S.rr === "auto" ? (cityBonus(current, e.craftLoc) ? ` with ${esc(e.craftLoc)}'s bonus for this item` : ` in ${esc(e.craftLoc)}, which has no bonus for this item`) + (S.focus ? " and focus" : "") : ""}) + artifacts, tomes and sigils at full price, because those never come back${+S.fee100 && e.best && !e.best.upgrade ? ` + a ${fmt(e.best.fee / e.best.n)} station fee (${fmt(e.best.fee * 100 / +S.fee100)} nutrition at ${fmt(+S.fee100)} per 100)` : ""}.</li>`;
-  if (h) html += h.vol ? `<li>About <b class="mono">${fmt(h.vol)}</b> sell per day in ${esc(cityEl.value)} (28-day average, all qualities). Craft <b class="mono">${fmt(Math.max(1, h.vol * 0.2))}–${fmt(Math.max(1, h.vol * 0.3))}</b> at a time (20–30% of daily sales) so they sell in a day or two.</li>`
+  if (h) html += h.vol ? `<li>About <b class="mono">${fmt(h.vol)}</b> sell per day in ${esc(cityEl.value)} (28-day average, all qualities). Craft about <b class="mono">${fmt(Math.max(1, Math.floor(h.vol * 0.2)))}</b> at a time (20% of daily sales, the safe end of the 20–30% rule) so they sell in a day or two.</li>`
     : `<li class="old">No recorded sales in ${esc(cityEl.value)} over the last 28 days. Craft one or two to test before making a batch.</li>`;
   if (!e.best) html += `<li class="old">Some material prices are missing in ${esc(matLoc())}, so the cost can't be worked out. Nobody may be selling them there right now.</li>`;
   const real = realSale(sale, h, cityEl.value);
@@ -1240,8 +1240,8 @@ function finderResults(sortKey, quick) {
       }
     }
     if (e.profit < minProfit || e.margin == null || e.margin < minM || e.margin > maxM) continue;
-    // How many to make: 25% of daily sales (Nendys' 20–30% rule), capped by your item and silver limits.
-    let amount = h && h.vol ? Math.max(1, Math.floor(h.vol * 0.25)) : null;
+    // How many to make: 20% of daily sales (the low end of Nendys' 20–30% rule, to stay safe), capped by your item and silver limits.
+    let amount = h && h.vol ? Math.max(1, Math.floor(h.vol * 0.2)) : null;
     if (maxItems > 0) amount = Math.min(amount ?? maxItems, maxItems);
     if (budget > 0) amount = Math.min(amount ?? Infinity, Math.floor(budget / e.best.cost));
     if (amount === Infinity) amount = null;
@@ -1275,7 +1275,7 @@ function renderFinder() {
         <td class="num">${r.total != null ? signed(r.total) : "—"}</td>
         <td class="num">${r.h ? fmt(r.h.vol) + (r.h.avg ? `<span class="age">avg ${short(r.h.avg)}</span>` : "") : "—"}</td></tr>`;
     }).join("")}
-    </tbody></table><p class="note" style="padding:0 12px 12px">Amount is 25% of daily sales (the 20–30% rule), capped by your max items and max silver; "—" means sales haven't been checked for it yet. Routes don't count transport: carry heavy loads on an ox through blue and yellow zones, or pay the travel planner. Caerleon and the Black Market mean a red-zone trip. Check the price chart in game before a big batch.</p>`;
+    </tbody></table><p class="note" style="padding:0 12px 12px">Amount is 20% of daily sales (the safe end of the 20–30% rule), capped by your max items and max silver; "—" means sales haven't been checked for it yet. Routes don't count transport: carry heavy loads on an ox through blue and yellow zones, or pay the travel planner. Caerleon and the Black Market mean a red-zone trip. Check the price chart in game before a big batch.</p>`;
   out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => {
     const r = res.find(x => x.id === tr.dataset.open && x.l === tr.dataset.l);
     fromFinder = r && { id: r.id, l: r.l, e: r.e, amount: r.amount };
@@ -1560,10 +1560,10 @@ function flipResults(raw) {
     if (!sell) continue;
     const profit = sell.sale.net - best.cost, margin = best.cost > 0 ? profit / best.cost : null;
     if (!raw && (profit < minProfit || margin < minM)) continue;
-    // How many to flip: 25% of daily sales, and no more than your silver covers. Items you can't afford even once drop out.
+    // How many to flip: 20% of daily sales, and no more than your silver covers. Items you can't afford even once drop out.
     const budget = +XF.budget || 0;
     if (!raw && budget > 0 && best.cost > budget) continue;
-    let amount = sell.h && sell.h.vol ? Math.max(1, Math.floor(sell.h.vol * 0.25)) : null;
+    let amount = sell.h && sell.h.vol ? Math.max(1, Math.floor(sell.h.vol * 0.2)) : null;
     if (budget > 0) amount = Math.min(amount ?? Infinity, Math.floor(budget / best.cost));
     if (amount === Infinity) amount = null;
     const craft = cheapest(craftParts(e.id, p.b, best.city, mode).filter(x => !x.upgrade), returnRate(e.id, best.city));
@@ -1593,7 +1593,7 @@ function renderFlips() {
           : `Flip it<span class="age">crafting costs ${fmt(r.craft.cost)} (${signed(r.craft.cost - r.buy.cost)} more)</span>`}</td>
         <td class="num">${fmt(r.h.vol)}</td><td class="num">${r.amount != null ? fmt(r.amount) + `<span class="age">spend ${short(r.amount * r.buy.cost)}</span>` : "—"}</td><td class="num">${r.perDay != null ? signed(r.perDay) : "—"}</td></tr>`;
     }).join("")}</tbody></table>
-    <p class="note" style="padding:0 12px 12px">"Craft instead?" compares crafting the finished item in the city you buy in (materials after your return rate, artifacts and station fee) with buying and enchanting it; crafting needs the right Destiny Board level. * Total profit = profit each × amount. Amount is 25% of daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver; items costing more than that are hidden` : ""}. The lower item is bought at the cheapest sell order (normal or good quality; enchanting keeps the quality). Enchanting is done at the Artifact Foundry. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}. Transport between cities isn't counted.</p>`;
+    <p class="note" style="padding:0 12px 12px">"Craft instead?" compares crafting the finished item in the city you buy in (materials after your return rate, artifacts and station fee) with buying and enchanting it; crafting needs the right Destiny Board level. * Total profit = profit each × amount. Amount is 20% of daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver; items costing more than that are hidden` : ""}. The lower item is bought at the cheapest sell order (normal or good quality; enchanting keeps the quality). Enchanting is done at the Artifact Foundry. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}. Transport between cities isn't counted.</p>`;
   out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
 }
 
