@@ -304,7 +304,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
     <label class="fld">Tier<select id="x-tier"><option value="">All tiers</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
     <label class="fld">Buy in<select id="x-buy"></select></label>
     <label class="fld">Sell in<select id="x-sell"></select></label>
-    <label class="fld">Enchant up to<select id="x-steps"><option value="1">1 step (.0 → .1)</option><option value="2">2 steps (.0 → .2)</option><option value="3">3 steps (.0 → .3)</option></select></label>
+    <label class="fld">Enchant steps<select id="x-steps"><option value="3">All combinations (.0→.1 up to .0→.3)</option><option value="2">Up to 2 steps (e.g. .0→.2)</option><option value="1">1 step only (e.g. .0→.1)</option></select></label>
     <label class="fld">Sell by<select id="x-sellby"><option value="order">Sell order</option><option value="instant">Instant (buy order)</option></select></label>
   </div>
   <div class="fgrid nums">
@@ -1395,7 +1395,7 @@ async function fillMats(replace) {
 }
 
 // Enchant flips: buy an item at a lower enchantment, upgrade it with runes, souls or relics, and sell it.
-let XF = Object.assign({ q: "", cat: "", tier: "", buy: "Fort Sterling", sell: "", steps: "1", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10, age: 24, sort: "day" }, store.get("flips") || {});
+let XF = Object.assign({ q: "", cat: "", tier: "", buy: "Fort Sterling", sell: "", steps: "3", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10, age: 24, sort: "day" }, store.get("flips") || {});
 let flipScan = null;
 const saveXF = () => store.set("flips", XF);
 const FLIP_CATS = ["weapons", "head", "armors", "shoes", "offhands", "capes", "bags", "gathering"];
