@@ -681,14 +681,20 @@ function buyOf(loc, id, o = CARD_MODE) {
 
 // Every way to get one item of this tier and enchantment, with materials bought in market ml: each recipe, plus buying
 // the enchantment below and enchanting it. Returns the parts so the cost can be redone for any return rate.
-// What it costs to make one of an ingredient yourself in market ml (an artifact from runes or crystal shards, the
-// plain cape inside a faction cape, ...), using its own cheapest recipe. One level deep only.
+// A meld: an artifact recipe of runes, souls, relics or Avalonian shards, which gives a random artifact from a pool.
+// Crystal shards are different: they forge the exact crystal artifact you pick.
+const MELD_RE = /^T\d_(RUNE|SOUL|RELIC|SHARD_AVALONIAN)$/;
+const isMeld = r => r.m.length === 1 && MELD_RE.test(r.m[0][0]);
+// What it costs to make one of an ingredient yourself in market ml (a crystal artifact from crystal shards, the
+// plain cape inside a faction cape, ...), using its own cheapest recipe. One level deep only; melds don't count.
 function ingredientCost(mid, ml, o) {
   const [base, lv] = mid.split("@"), it = DB.items[base], recs = it && it.r[lv || "0"];
   if (!recs) return null;
   const rr = returnRate(base, ml);
   let best = null;
   for (const r of recs) {
+    // Melding runes, souls, relics or Avalonian shards gives a random artifact from a pool, not this one.
+    if (isMeld(r)) continue;
     let back = 0, gone = 0, ok = true;
     for (const [x, c, a] of r.m) { const p = buyOf(ml, x, o); if (p == null) { ok = false; break } if (a) gone += p * c; else back += p * c }
     if (ok) { const c = (back * (1 - rr) + gone + stationFee(r)) / r.n; if (best == null || c < best) best = c }
@@ -714,6 +720,7 @@ function craftParts(id, lvl, ml, o) {
       if (p == null) return { label: recipeLabel(recs, i), missing: true };
       if (art) gone += p * cnt; else back += p * cnt;
     }
+    if (isMeld(r)) return { label: "Meld: gives a random artifact, maybe not this one", back, gone, n: r.n, fee: stationFee(r), crafted, meld: true };
     return { label: recipeLabel(recs, i) + (crafted.length ? ` (make the ${crafted.map(c => nameOf(c.mid)).join(", ")} yourself)` : ""), back, gone, n: r.n, fee: stationFee(r), crafted };
   });
   const u = recs[0].u;
@@ -891,6 +898,7 @@ function renderCard() {
     const total = rows.every(x => x.price) ? rows.reduce((s, x) => s + x.price * x.count, 0) : null;
     html += `<div class="recipe"><h3>${recs.length > 1 ? (i === 0 ? "Recipe" : "Alternative recipe " + i) : "Recipe"}</h3>
       <div class="facts"><span>Makes <b>${r.n}</b> per craft</span>${r.f ? `<span>Focus <b>${fmt(r.f)}</b></span>` : ""}${r.s ? `<span>Silver <b>${fmt(r.s)}</b></span>` : ""}${r.u ? `<span>Or upgrade from .${+level - 1}: <b>${r.u[1]}</b> ${esc(nameOf(r.u[0]))}</span>` : ""}</div>
+      ${isMeld(r) ? `<p class="note old">This is a meld: ${r.m[0][1]} ${esc(nameOf(r.m[0][0]))} at the Artifact Foundry give a <b>random</b> artifact from a pool of this tier, not necessarily this one. To get this exact artifact, buy it on the market.</p>` : ""}
       <div class="tablewrap"><table><thead><tr><th>Material</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Line</th></tr></thead><tbody>
       ${rows.map(x => `<tr><td><div class="mat">${icon(x.id, 40)}<div>${DB.items[x.id.split("@")[0]] && !x.id.includes("_LEVEL") ? `<button class="link" data-open="${x.id.split("@")[0]}">${esc(nameOf(x.id))}</button>` : esc(nameOf(x.id))}${x.isArt ? '<span class="art" title="Artifacts are used up and never returned">not returned</span>' : ""}<span class="id">${x.id}</span></div></div></td>
         <td class="num">${x.count}</td><td class="num">${fmt(x.price)}${x.age ? `<span class="age ${x.age.old ? "old" : ""}">${x.age.text}</span>` : ""}</td><td class="num">${x.price ? fmt(x.price * x.count) : "—"}</td></tr>`).join("")}
