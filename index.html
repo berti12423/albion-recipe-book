@@ -211,6 +211,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   <button role="tab" id="tab-recipes" data-view="recipes" aria-selected="true">Recipes</button>
   <button role="tab" id="tab-finder" data-view="finder" aria-selected="false">Profit finder</button>
   <button role="tab" id="tab-mats" data-view="mats" aria-selected="false">Material costs</button>
+  <button role="tab" id="tab-flips" data-view="flips" aria-selected="false">Enchant flips</button>
   <button role="tab" id="tab-guide" data-view="guide" aria-selected="false">Guide</button>
   <button role="tab" id="tab-crafting" data-view="crafting" aria-selected="false">Crafting path<span class="pct" id="pct-crafting"></span></button>
   <button role="tab" id="tab-island" data-view="island" aria-selected="false">Island path<span class="pct" id="pct-island"></span></button>
@@ -292,6 +293,29 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   </div>
   <p class="note" id="m-note">Prices are per unit. Leave a box empty to skip items that need it. Boxes filled from the market show how long ago the price was listed; boxes you typed yourself have no age.</p>
   <div class="card"><div class="tablewrap" id="m-out"></div></div>
+</section>
+
+<section id="view-flips" class="finder" hidden>
+  <div class="path-head"><div><h2>Enchant flips</h2>
+    <p>Items worth buying at a lower enchantment and upgrading at the Artifact Foundry: runes take .0 to .1, souls .1 to .2, relics .2 to .3. Cost = the cheapest sell order for the lower item + the runes, souls or relics. Only items that really sell are shown, and the sale price is checked against 28 days of sales.</p></div></div>
+  <div class="fgrid">
+    <label class="fld">Search<input id="x-q" type="search" placeholder="e.g. bow, hood" autocomplete="off"></label>
+    <label class="fld">Category<select id="x-cat"></select></label>
+    <label class="fld">Tier<select id="x-tier"><option value="">All tiers</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
+    <label class="fld">Buy in<select id="x-buy"></select></label>
+    <label class="fld">Sell in<select id="x-sell"></select></label>
+    <label class="fld">Enchant up to<select id="x-steps"><option value="1">1 step (.0 → .1)</option><option value="2">2 steps (.0 → .2)</option><option value="3">3 steps (.0 → .3)</option></select></label>
+    <label class="fld">Sell by<select id="x-sellby"><option value="order">Sell order</option><option value="instant">Instant (buy order)</option></select></label>
+  </div>
+  <div class="fgrid nums">
+    <label class="fld">Min sold / day<input id="x-vol" type="number" min="0" step="1"></label>
+    <label class="fld">Min profit each<input id="x-minprofit" type="number" step="500"></label>
+    <label class="fld">Min margin %<input id="x-minmargin" type="number" step="5"></label>
+    <label class="fld">Max data age (h)<input id="x-age" type="number" min="0" step="1"></label>
+  </div>
+  <div class="controls"><button class="primary" id="x-scan">Scan prices</button><label class="chk">Sort by <select id="x-sort"><option value="day">Profit per day</option><option value="profit">Profit each</option><option value="margin">Margin</option></select></label></div>
+  <p class="note" id="x-note">Pick your filters and press Scan. A full scan of every tier takes about a minute.</p>
+  <div class="card"><div class="tablewrap" id="x-out"></div></div>
 </section>
 
 <section id="view-guide" class="guide" hidden>
@@ -682,6 +706,7 @@ async function boot() {
   setupFinder();
   setupMats();
   if (view === "mats") renderMats();
+  setupFlips();
   [...tiers].sort((a, b) => a - b).forEach(t => $("tier").add(new Option("Tier " + t, t)));
   const [start, startLevel] = location.hash.slice(1).split("@");
   renderList();
@@ -721,7 +746,7 @@ function nav(hash) {
 }
 // Restore the page for a hash: a tab name, or a recipe id with an optional @enchantment.
 function route(h) {
-  if (PATHS[h] || ["finder", "guide", "mats"].includes(h)) return show(h, true);
+  if (PATHS[h] || ["finder", "guide", "mats", "flips"].includes(h)) return show(h, true);
   const [id, l] = h.split("@");
   if (!DB || !DB.items[id]) return;
   level = l && DB.items[id].r[l] ? l : "0";
@@ -1369,6 +1394,141 @@ async function fillMats(replace) {
   $("m-fill").disabled = $("m-fillall").disabled = false;
 }
 
+// Enchant flips: buy an item at a lower enchantment, upgrade it with runes, souls or relics, and sell it.
+let XF = Object.assign({ q: "", cat: "", tier: "", buy: "Fort Sterling", sell: "", steps: "1", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10, age: 24, sort: "day" }, store.get("flips") || {});
+let flipScan = null;
+const saveXF = () => store.set("flips", XF);
+const FLIP_CATS = ["weapons", "head", "armors", "shoes", "offhands", "capes", "bags", "gathering"];
+const flipOk = () => +XF.age > 0 ? d => !d || (Date.now() - new Date(d + "Z").getTime()) / 36e5 <= +XF.age : anyPrice;
+
+function setupFlips() {
+  $("x-cat").innerHTML = '<option value="">All gear</option>' + FLIP_CATS.map(c => `<option value="${c}">${pretty(c)}</option>`).join("");
+  $("x-buy").innerHTML = '<option value="*">Cheapest of all cities</option>' + CITIES.map(c => `<option>${c}</option>`).join("");
+  $("x-sell").innerHTML = '<option value="">Same city as I buy in</option><option value="*">Best of all cities</option>' + SELL_MARKETS.map(c => `<option>${c}</option>`).join("");
+  for (const [id, key, live] of [["x-q", "q"], ["x-cat", "cat"], ["x-tier", "tier"], ["x-buy", "buy"], ["x-sell", "sell"], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-vol", "vol", 1], ["x-minprofit", "minProfit", 1], ["x-minmargin", "minMargin", 1], ["x-age", "age", 1], ["x-sort", "sort", 1]]) {
+    const el = $(id);
+    el.value = XF[key];
+    el[el.tagName === "SELECT" ? "onchange" : "oninput"] = () => { XF[key] = el.value; saveXF(); if (live) renderFlips() };
+  }
+  $("x-scan").onclick = scanFlips;
+}
+
+const flipMarkets = () => {
+  const buy = XF.buy === "*" ? CITIES : [XF.buy];
+  const sell = XF.sell === "*" ? SELL_MARKETS : XF.sell ? [XF.sell] : null;
+  return { buy, sell };
+};
+
+function flipItems() {
+  const words = XF.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return DB.list.filter(e => FLIP_CATS.includes(e.it.c) && (!XF.cat || e.it.c === XF.cat) && (!XF.tier || e.it.t === +XF.tier) && words.every(w => e.hay.includes(w))
+    && Object.keys(e.it.r).some(l => l !== "0" && e.it.r[l][0].u));
+}
+
+// Every flip for one item: from level a to level b (up to the chosen number of steps), with the upgrade materials.
+function flipPaths(e) {
+  const out = [], max = +XF.steps;
+  for (let a = 0; a < 3; a++) {
+    if (!e.it.r[String(a)]) continue;
+    const ups = [];
+    for (let b = a + 1; b <= Math.min(3, a + max); b++) {
+      const u = e.it.r[String(b)] && e.it.r[String(b)][0].u;
+      if (!u) break;
+      ups.push(u);
+      out.push({ a: String(a), b: String(b), ups: [...ups] });
+    }
+  }
+  return out;
+}
+
+async function scanFlips() {
+  const items = flipItems(), n = $("x-note"), btn = $("x-scan");
+  if (!items.length) { n.textContent = "No enchantable items match these filters."; return }
+  const m = flipMarkets(), locs = [...new Set([...m.buy, ...(m.sell || m.buy)])];
+  const products = new Set(), mats = new Set();
+  for (const e of items) for (const p of flipPaths(e)) { products.add(priceId(e.id, p.a)); products.add(priceId(e.id, p.b)); p.ups.forEach(u => mats.add(u[0])) }
+  btn.disabled = true;
+  const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
+  try {
+    await fetchPrices([...mats], locs, step("rune, soul and relic prices"), { persist: false, qualities: "1" });
+    await fetchPrices([...products], locs, step("item prices"), { persist: false, qualities: "1,2" });
+    flipScan = { items, m };
+    renderFlips();
+    // Check the most promising flips against 28 days of real sales in the city they sell in, a batch at a time.
+    for (let round = 0; round < 12; round++) {
+      const todo = flipResults(true).filter(r => r.profit > 0 && !(r.h && r.h.lq === 1 && Date.now() - r.h.t < 36e5)).slice(0, 40);
+      if (!todo.length) break;
+      n.textContent = `Checking real sales… (${round + 1})`;
+      const bySell = {};
+      for (const r of todo) (bySell[r.sellLoc] ??= new Set()).add(priceId(r.e.id, r.b));
+      for (const [loc, ids] of Object.entries(bySell)) await fetchHistory([...ids], loc).catch(() => {});
+      renderFlips();
+    }
+    renderFlips();
+  } catch (err) {
+    n.textContent = err instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : err.message;
+  }
+  btn.disabled = false;
+}
+
+// raw: every priced flip before the sales check, used to pick which ones to check next.
+function flipResults(raw) {
+  if (!flipScan) return [];
+  const ok = flipOk(), mode = { buyBy: "instant", sellBy: XF.sellBy, ok }, out = [];
+  const minVol = +XF.vol || 0, minProfit = XF.minProfit === "" ? -Infinity : +XF.minProfit, minM = XF.minMargin === "" ? -Infinity : +XF.minMargin / 100;
+  for (const e of flipScan.items) for (const p of flipPaths(e)) {
+    // Cheapest place to buy the lower item plus all the runes, souls and relics.
+    let best = null;
+    for (const c of flipScan.m.buy) {
+      const item = buyOf(c, priceId(e.id, p.a), mode);
+      if (item == null) continue;
+      let up = 0, okAll = true;
+      for (const [mid, cnt] of p.ups) { const pr = buyOf(c, mid, mode); if (pr == null) { okAll = false; break } up += pr * cnt }
+      if (okAll && (!best || item + up < best.cost)) best = { city: c, item, up, cost: item + up };
+    }
+    if (!best) continue;
+    // Best place to sell the upgraded item, checked against real sales.
+    let sell = null;
+    for (const s of flipScan.m.sell || [best.city]) {
+      const h = store.get("h:" + s + "|" + priceId(e.id, p.b));
+      const sale = realSale(saleOf(priceId(e.id, p.b), s, mode), h, s);
+      if (!sale) continue;
+      // Cities already known to be a troll price, unsold, or too slow drop out even while choosing what to check next,
+      // so the next-best city gets checked instead.
+      if (sale.flag === "troll" || sale.flag === "nosales" || (h && h.lq === 1 && h.vol < minVol)) continue;
+      if (!raw && (sale.flag === "unchecked" || !h)) continue;
+      if (!sell || sale.net > sell.sale.net) sell = { s, sale, h };
+    }
+    if (!sell) continue;
+    const profit = sell.sale.net - best.cost, margin = best.cost > 0 ? profit / best.cost : null;
+    if (!raw && (profit < minProfit || margin < minM)) continue;
+    out.push({ e, ...p, buy: best, sellLoc: sell.s, sale: sell.sale, h: sell.h, profit, margin, perDay: sell.h ? profit * sell.h.vol * 0.25 : null });
+  }
+  const k = raw ? "profit" : XF.sort, v = r => k === "margin" ? r.margin : k === "profit" ? r.profit : (r.perDay ?? -Infinity);
+  return out.sort((a, b) => v(b) - v(a) || b.profit - a.profit);
+}
+
+function renderFlips() {
+  const out = $("x-out"), n = $("x-note");
+  if (!flipScan) { out.innerHTML = ""; return }
+  const res = flipResults(), checked = flipResults(true).filter(r => r.h && r.h.lq === 1).length;
+  n.textContent = `${res.length} profitable flips that sell at least ${+XF.vol || 0} a day, out of ${checked} checked against real sales. Click a row for the item's recipe.`;
+  if (!res.length) { out.innerHTML = '<p class="empty">No flip passes these filters right now. Try more cities, more enchant steps, a lower minimum, or a longer max data age.</p>'; return }
+  const ench = { RUNE: "runes", SOUL: "souls", RELIC: "relics" };
+  out.innerHTML = `<table><thead><tr><th>Item</th><th>Buy</th><th>Enchant with</th><th>Sell</th><th class="num">Profit each</th><th class="num">Sold / day</th><th class="num">Profit / day*</th></tr></thead><tbody>
+    ${res.slice(0, 300).map(r => {
+      const ab = ageText(r.sale.d), it = r.e.it;
+      return `<tr data-open="${r.e.id}" data-l="${r.b}"><td><div class="mat">${icon(priceId(r.e.id, r.b), 32)}<div>${esc(r.e.name)}<span class="age">T${it.t}.${r.a} → T${it.t}.${r.b}</span></div></div></td>
+        <td class="num">${fmt(r.buy.item)}<span class="age">.${r.a} in ${esc(r.buy.city)}</span></td>
+        <td>${r.ups.map(([mid, cnt]) => `${cnt} ${ench[mid.split("_")[1]] || nameOf(mid)}`).join(" + ")}<span class="age">${fmt(r.buy.up)} · total cost ${fmt(r.buy.cost)}</span></td>
+        <td class="num">${fmt(r.sale.v)}<span class="age">.${r.b} in ${esc(r.sellLoc)}${r.sale.flag === "avg" ? " · 28-day average" : ab ? " · " + ab.text : ""}</span></td>
+        <td class="num">${signed(r.profit)}<span class="age">${pct(r.margin)}</span></td>
+        <td class="num">${fmt(r.h.vol)}</td><td class="num">${r.perDay != null ? signed(r.perDay) : "—"}</td></tr>`;
+    }).join("")}</tbody></table>
+    <p class="note" style="padding:0 12px 12px">* Profit per day assumes you flip 25% of daily sales. The lower item is bought at the cheapest sell order (normal or good quality; enchanting keeps the quality). Enchanting is done at the Artifact Foundry. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}. Transport between cities isn't counted.</p>`;
+  out.querySelectorAll("tr[data-open]").forEach(tr => tr.onclick = () => { level = tr.dataset.l; show("recipes"); open(tr.dataset.open, true) });
+}
+
 // Settings bar.
 function setupSettings() {
   const rr = $("s-rr"), dc = $("s-dailycat");
@@ -1384,6 +1544,7 @@ function setupSettings() {
     if (current) renderCard();
     renderFinder();
     renderMats();
+    renderFlips();
   };
   ["s-rr", "s-focus", "s-daily", "s-dailycat", "s-prem"].forEach(id => $(id).onchange = save);
   $("s-fee").oninput = save;
@@ -1541,11 +1702,11 @@ function goalOut() {
 
 function show(v, fromHistory) {
   view = v;
-  for (const k of ["recipes", "finder", "mats", "guide", "crafting", "island"]) {
+  for (const k of ["recipes", "finder", "mats", "flips", "guide", "crafting", "island"]) {
     $("view-" + k).hidden = k !== v;
     $("tab-" + k).setAttribute("aria-selected", k === v);
   }
-  $("settings").hidden = !(v === "recipes" || v === "finder" || v === "mats");
+  $("settings").hidden = !(v === "recipes" || v === "finder" || v === "mats" || v === "flips");
   if (v === "mats" && DB) renderMats();
   if (PATHS[v]) renderPath(v);
   if (!fromHistory) nav(v === "recipes" ? (current ? cardHash() : "") : v);
@@ -1561,7 +1722,7 @@ $("g-bonus").innerHTML = `<table><thead><tr><th>City</th><th>Crafting +15%</th><
 }).join("")}</tbody></table>`;
 {
   const h = location.hash.slice(1);
-  show(PATHS[h] || ["finder", "guide", "mats"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")), !!h);
+  show(PATHS[h] || ["finder", "guide", "mats", "flips"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")), !!h);
 }
 
 boot().catch(() => { $("card").innerHTML = '<p class="empty">The recipe list didn\'t load. Reload the page to try again.</p>' });

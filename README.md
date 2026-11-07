@@ -5,6 +5,7 @@ Every craftable Albion Online item (3,443 items, every tier and enchantment) wit
 - Profit on every recipe: real cost after your return rate (artifacts never come back), tax and fees, the cheapest way to make it (crystallized artifact recipe or enchanting the tier below), sales per day and how many to craft (20–30% of daily sales).
 - Profit finder: scan every craftable item (or one category, tier or enchantment) and rank by profit, % on cost or profit per day. Buy and sell in one city, or travel: buy in the cheapest city and sell in the best, optionally including Caerleon and the Black Market. The top items are checked against 28 days of real sales to drop troll listings.
 - Material costs: type in your plank, metal bar, cloth and leather prices per tier and enchantment (or fill them from the market) and see what every weapon, off-hand or armor piece costs to make.
+- Enchant flips: items worth buying at a lower enchantment and upgrading with runes, souls or relics, filtered by real daily sales and checked for troll prices.
 - Guide: a crafting profit guide drawn from about 250 Nendys videos and shorts, with the city bonus table from the game files.
 - Crafting path and island path checklists, including the habits from Nendys' crafting videos.
 
