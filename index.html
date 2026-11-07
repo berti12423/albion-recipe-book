@@ -300,6 +300,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
     <label class="fld">Max silver (0 = none)<input id="f-budget" type="number" min="0" step="100000"></label>
   </div>
   <div class="controls">
+    <label class="chk"><input type="checkbox" id="f-refine"> Include refining (leather, cloth, planks, bars, stone blocks)</label>
     <label class="chk"><input type="checkbox" id="f-check"> Check the top items against 28 days of real sales (drops troll listings and items nobody buys)</label>
   </div>
   <div class="controls">
@@ -1266,6 +1267,7 @@ function setupFinder() {
     $(id).oninput = () => { F[key] = $(id).value === "" ? "" : +$(id).value; saveF(); renderFinder() };
   }
   $("f-check").checked = F.check; $("f-check").onchange = () => { F.check = $("f-check").checked; saveF(); renderFinder() };
+  $("f-refine").checked = !!F.refine; $("f-refine").onchange = () => { F.refine = $("f-refine").checked; saveF(); renderFinder() };
   $("f-reset").onclick = () => { F = { ...F_DEFAULT }; saveF(); setupFinder(); renderFinder() };
   $("f-scan").onclick = () => runScan(false);
   $("f-refresh").onclick = () => runScan(true);
@@ -1278,6 +1280,7 @@ function finderItems() {
   const words = F.name.trim().toLowerCase().split(/\s+/).filter(Boolean), out = [];
   for (const e of DB.list) {
     if (notStationCrafted(e.it)) continue;
+    if (!F.refine && e.it.s === "refinedresources") continue; // refining, not crafting: only when asked for
     if (F.cat && e.it.c !== F.cat) continue;
     if (F.sub && e.it.s !== F.sub) continue;
     if (F.tier && e.it.t !== +F.tier) continue;
