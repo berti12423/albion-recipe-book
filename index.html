@@ -726,7 +726,8 @@ function craftParts(id, lvl, ml, o) {
   const u = recs[0].u;
   if (u && lvl !== "0") {
     const prev = buyOf(ml, priceId(id, String(lvl - 1)), o), rune = buyOf(ml, u[0], o);
-    parts.push({ label: `Buy the .${lvl - 1} and enchant it (${u[1]} ${nameOf(u[0])})`, fixed: prev != null && rune != null ? prev + rune * u[1] : null, upgrade: true, missing: prev == null || rune == null });
+    parts.push({ label: `Buy the .${lvl - 1} and enchant it (${u[1]} ${nameOf(u[0])})`, fixed: prev != null && rune != null ? prev + rune * u[1] : null, upgrade: true, missing: prev == null || rune == null,
+      prev, rune, runeId: u[0], runeCnt: u[1], from: lvl - 1 });
   }
   return parts;
 }
@@ -869,7 +870,7 @@ function profitHtml() {
   else html += `<p>${verdict(e.margin)} <span class="big">${signed(e.profit)}</span> per item${e.margin != null ? `, <b>${pct(e.margin)}</b> on cost` : ""}</p>
     <p class="note">Right now ${where} <b class="mono">${fmt(sale.v)}</b>${sale.q > 1 ? ` (${QUALITY[sale.q]})` : ""}${age ? ` <span class="${age.old ? "old" : ""}">${age.text}</span>` : ""}. After ${S.premium ? "4%" : "8%"} tax${isBM() ? "" : " and the 2.5% listing fee"} you keep <b class="mono">${fmt(e.net)}</b>.</p>`;
   html += `<div class="tablewrap"><table><thead><tr><th>How you get it</th><th class="num">Real cost</th><th class="num">Profit</th></tr></thead><tbody>
-    ${e.opts.map(o => `<tr${o === e.best && e.opts.length > 1 ? ' class="best"' : ""}><td>${esc(o.label)}${o === e.best && e.opts.length > 1 ? ' <span class="pill good">cheapest</span>' : ""}</td><td class="num">${fmt(o.cost)}</td><td class="num">${o.cost != null && e.net != null ? signed(e.net - o.cost) : "—"}</td></tr>`).join("")}
+    ${e.opts.map(o => `<tr${o === e.best && e.opts.length > 1 ? ' class="best"' : ""}><td>${esc(o.label)}${o === e.best && e.opts.length > 1 ? ' <span class="pill good">cheapest</span>' : ""}${o.upgrade ? `<span class="age">.${o.from} item ${o.prev != null ? fmt(o.prev) : "no price"} + ${o.runeCnt} × ${esc(nameOf(o.runeId))} at ${o.rune != null ? fmt(o.rune) + " = " + fmt(o.rune * o.runeCnt) : "no price"}</span>` : ""}</td><td class="num">${fmt(o.cost)}</td><td class="num">${o.cost != null && e.net != null ? signed(e.net - o.cost) : "—"}</td></tr>`).join("")}
     </tbody></table></div><ul>`;
   for (const c of (e.best && e.best.crafted) || []) html += `<li class="pos">Make the <b>${esc(nameOf(c.mid))}</b> yourself for about <b class="mono">${fmt(c.cost)}</b>${c.market != null ? ` instead of buying it for ${fmt(c.market)}` : " (nobody sells it here)"}: ${esc(DB.items[c.mid.split("@")[0]].r[c.mid.split("@")[1] || "0"][0].m.map(([x, n]) => n + " × " + nameOf(x)).join(" + "))}${c.cnt > 1 ? `, ${c.cnt} of them per craft` : ""}.</li>`;
   html += `<li>Real cost = materials × ${Math.round((1 - e.rr) * 1000) / 10}% (a ${Math.round(e.rr * 1000) / 10}% return rate${S.rr === "auto" ? (cityBonus(current, e.craftLoc) ? ` with ${esc(e.craftLoc)}'s bonus for this item` : ` in ${esc(e.craftLoc)}, which has no bonus for this item`) + (S.focus ? " and focus" : "") : ""}) + artifacts, tomes and sigils at full price, because those never come back${+S.fee100 && e.best && !e.best.upgrade ? ` + a ${fmt(e.best.fee / e.best.n)} station fee (${fmt(e.best.fee * 100 / +S.fee100)} nutrition at ${fmt(+S.fee100)} per 100)` : ""}.</li>`;
