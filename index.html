@@ -246,7 +246,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
       <option>Fort Sterling</option><option>Martlock</option><option>Thetford</option><option>Lymhurst</option>
       <option>Bridgewatch</option><option>Caerleon</option><option>Brecilien</option><option>Black Market</option>
     </select>
-    <span>· Europe server</span>
+    <span>· Europe server</span><span id="live"></span>
   </div>
 </header>
 
@@ -602,7 +602,8 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 </div>
 
 <script>
-const AODP = "https://europe.albion-online-data.com/api/v2/stats/prices/";
+const LOCAL = location.port === "8740"; // opened from server/server.mjs: live prices, no rate limits
+const AODP = (LOCAL ? "" : "https://europe.albion-online-data.com") + "/api/v2/stats/prices/";
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} }
@@ -633,7 +634,7 @@ function ageText(iso) {
 }
 
 // Prices are cached per market: "p:<location>|<id>" = { s: cheapest sell order, d, q, b: black market normal-quality buy order, bd }.
-const AODP_HISTORY = "https://europe.albion-online-data.com/api/v2/stats/history/";
+const AODP_HISTORY = (LOCAL ? "" : "https://europe.albion-online-data.com") + "/api/v2/stats/history/";
 // A full finder scan holds far more prices than localStorage fits, so scans live in memory and the recipe card also caches to storage.
 const PRICES = new Map();
 const getPrice = (loc, id) => PRICES.get(loc + "|" + id) ?? store.get("p:" + loc + "|" + id);
@@ -988,7 +989,7 @@ function parseJsonArray(payload) {
 // Price cache: every price loaded is kept in memory and saved in the browser's IndexedDB (localStorage is far too
 // small for a full scan), so scans and reloads reuse anything loaded in the last S.cacheMin minutes.
 const FETCHED = new Map();
-const cacheMinutes = () => Math.max(0, +S.cacheMin || 0);
+const cacheMinutes = () => LOCAL ? Math.min(1, +S.cacheMin || 0) : Math.max(0, +S.cacheMin || 0);
 let priceDb = null;
 function openPriceDb() {
   return priceDb ??= new Promise(res => {
@@ -1046,7 +1047,7 @@ async function fetchPrices(ids, locs, onStep, { persist = true, qualities = "", 
   }
   const best = {};
   for (const [i, c] of chunks.entries()) {
-    if (i) await new Promise(r => setTimeout(r, 400));
+    if (i && !LOCAL) await new Promise(r => setTimeout(r, 400));
     if (onStep) onStep(i + 1, chunks.length);
     const url = AODP + c.map(encodeURIComponent).join(",") + ".json?locations=" + locs.map(encodeURIComponent).join(",") + (qualities ? "&qualities=" + qualities : "");
     let res;
@@ -1935,6 +1936,29 @@ function openFlip(d) {
     fetchHistory(ids, locs).then(() => { if (flipDetail && flipDetail.id === d.id) renderFlipDetail() }).catch(() => {});
 }
 
+// With the local server every order is known, so a plan can say what buying N really costs.
+const bookCache = new Map();
+function bookFor(id, city, q) {
+  if (!LOCAL) return null;
+  const k = city + "|" + id + "|" + q, c = bookCache.get(k);
+  if (c && Date.now() - c.t < 6e4) return c.list;
+  if (!c || !c.busy) {
+    bookCache.set(k, { t: 0, list: c ? c.list : null, busy: true });
+    fetch(`/local/orders?id=${encodeURIComponent(id)}&city=${encodeURIComponent(city)}&q=${q}`).then(r => r.json())
+      .then(list => { bookCache.set(k, { t: Date.now(), list }); if (flipDetail) renderFlipDetail() })
+      .catch(() => bookCache.set(k, { t: Date.now(), list: null }));
+  }
+  return c ? c.list : null;
+}
+function walkBook(list, n) {
+  let left = n, cost = 0;
+  const parts = [];
+  for (const o of list) { if (!left) break; const t = Math.min(left, o.a); parts.push([t, o.p]); cost += t * o.p; left -= t }
+  return { parts, cost, short: left, last: parts.length ? parts.at(-1)[1] : null };
+}
+const bookLine = (w, n) => !w.parts.length ? `<span class="age old">No live orders seen yet for this one.</span>` :
+  `<span class="age">Order book: ${w.parts.slice(0, 4).map(([t, v]) => `${fmt(t)} at ${fmt(v)}`).join(" · ")}${w.parts.length > 4 ? ` · +${w.parts.length - 4} more prices` : ""}, average ${fmt(w.cost / (n - w.short))}</span>${w.short ? `<span class="age old">Only ${fmt(n - w.short)} of ${fmt(n)} are listed right now.</span>` : ""}`;
+
 const flipFresh = new Map();
 async function freshenFlip(d) {
   const key = d.id + "|" + XF.cities.join(), last = flipFresh.get(key) || 0;
@@ -1994,6 +2018,9 @@ function renderFlipDetail() {
   const owned = mid => Math.max(0, +XF.owned[mid] || 0);
   const steps = [], lines = [];
   steps.push(`Buy <b>${N} × ${Q} T${it.t}.${D.a} ${esc(e.name)}</b> in <b>${esc(buy.item.city)}</b> at up to <b class="mono">${fmt(buy.item.v)}</b> each${ageText(buy.item.d) ? ` <span class="${ageText(buy.item.d).old ? "old" : ""}">(listed ${ageText(buy.item.d).text})</span>` : ""} → ${fmt(N * buy.item.v)}`);
+  let extra = 0; // what the real order book adds over "all N at the cheapest listing"
+  const itemBook = bookFor(priceId(e.id, D.a), buy.item.city, q);
+  if (itemBook) { const w = walkBook(itemBook, N); if (w.parts.length) { extra += w.cost + w.short * w.last - N * buy.item.v } steps[steps.length - 1] += bookLine(w, N) }
   lines.push(`${buy.item.city}: ${N} × ${Q} T${it.t}.${D.a} ${e.name} ≤ ${fmt(buy.item.v)}`);
   let saved = 0;
   for (const m of buy.mats) {
@@ -2001,6 +2028,8 @@ function renderFlipDetail() {
     saved += have * m.v;
     steps.push(`Buy <b>${fmt(get)} × ${esc(nameOf(m.mid))}</b> (${m.cnt} per item × ${N}${have ? `, minus ${fmt(have)} you own` : ""}) in <b>${esc(m.city)}</b> at up to <b class="mono">${fmt(m.v)}</b> → ${fmt(get * m.v)}
       <label class="own">I own <input type="number" min="0" step="1" data-own="${m.mid}" value="${XF.owned[m.mid] || ""}" placeholder="0"></label>`);
+    const matBook = get ? bookFor(m.mid, m.city, 1) : null;
+    if (matBook) { const w = walkBook(matBook, get); if (w.parts.length) { extra += w.cost + w.short * w.last - get * m.v } steps[steps.length - 1] += bookLine(w, get) }
     if (get) lines.push(`${m.city}: ${fmt(get)} × ${nameOf(m.mid)} ≤ ${fmt(m.v)}`);
   }
   const places = [...new Set([buy.item.city, ...buy.mats.map(m => m.city)])];
@@ -2009,15 +2038,16 @@ function renderFlipDetail() {
   const listAt = isBM(sell.s) || XF.sellBy === "instant" ? sell.sale.v : Math.max(1, (sell.sale.listed || sell.sale.v) - 1);
   steps.push(`${isBM(sell.s) || XF.sellBy === "instant" ? "Sell instantly" : "List a sell order"} for <b>${N} × ${Q} T${it.t}.${D.b}</b> in <b>${esc(sell.s)}</b> at <b class="mono">${fmt(listAt)}</b>${sell.sale.flag === "avg" ? ` <span class="age">counted at its 28-day average ${fmt(sell.sale.v)}</span>` : ""} → you keep <b class="mono">${fmt(N * sell.sale.net)}</b> after fees`);
   lines.push(`${sell.s}: ${isBM(sell.s) || XF.sellBy === "instant" ? "sell" : "list"} ${N} × ${Q} T${it.t}.${D.b} ${e.name} @ ${fmt(listAt)}`);
-  const total = N * profit + saved;
+  const total = N * profit + saved - extra;
+  const bookNote = Math.abs(extra) >= 1 ? `<p class="note">From the live order book, buying ${N} really costs <b class="mono">${fmt(Math.abs(extra))}</b> ${extra > 0 ? "more" : "less"} than all at the cheapest listing. The total above includes this.</p>` : "";
   const trip = tourOf([buy.item.city, ...buy.mats.map(m => m.city)], sell.s);
   const routeLine = `<p class="note"><b>Route:</b> ${esc(XF.start)} → ${trip.order.map(esc).join(" → ")} · <b>${Math.round(trip.min)} min</b> of travel${D.richest && D.richest.total > N * profit + 1 && D.richest.min > trip.min ? `. The cheapest-everywhere route would earn ${signed(D.richest.total - N * profit)} more but take ${Math.round(D.richest.min - trip.min)} min longer.` : ""}</p>`;
   html += `<div class="dsum">${gradePill(grade)} <span class="big">${signed(profit)}</span> each · <b>${signed(total)}</b> for ${N}${saved ? ` <span class="age">incl. ${fmt(saved)} of materials you own</span>` : ""}
     <label class="own">Amount <input type="number" min="1" step="1" id="xd-n" value="${N}"></label></div>
-    ${routeLine}
+    ${routeLine}${bookNote}
     ${grade.why.length ? `<p class="note">Grade ${grade.g}: ${esc(grade.why.join("; "))}.</p>` : ""}
     ${sell.h && sell.h.volQ ? `<p class="note">Sold per day by quality in ${esc(sell.s)}: ${esc(qualSplit(sell.h))}.</p>` : ""}
-    ${flipVol(sell.h, q) ? `<p class="note">About ${fmt(flipVol(sell.h, q))} ${Q} sell a day in ${esc(sell.s)}; ${N} is ${Math.round(N / flipVol(sell.h, q) * 100)}% of a day's sales${N > flipVol(sell.h, q) * 0.3 ? ' <span class="old">(more than 30%: it may take several days)</span>' : ""}. Silver needed: <b>${fmt(N * buy.cost - saved)}</b>.</p>` : ""}
+    ${flipVol(sell.h, q) ? `<p class="note">About ${fmt(flipVol(sell.h, q))} ${Q} sell a day in ${esc(sell.s)}; ${N} is ${Math.round(N / flipVol(sell.h, q) * 100)}% of a day's sales${N > flipVol(sell.h, q) * 0.3 ? ' <span class="old">(more than 30%: it may take several days)</span>' : ""}. Silver needed: <b>${fmt(N * buy.cost - saved + extra)}</b>.</p>` : ""}
     ${(() => { const hA = histOf(buy.item.city, priceId(e.id, D.a)), va = flipVol(hA, q); return hA && hA.dv === 4 && N > va ? `<p class="note old">Only about ${va < 10 ? va.toFixed(1) : fmt(va)} ${Q} .${D.a} trade a day in ${esc(buy.item.city)}, so buying ${N} may take several days or cost more than the cheapest listing.</p>` : "" })()}
     <h4>Flip plan</h4><ol class="dsteps">${steps.map(s => `<li>${s}</li>`).join("")}</ol>`;
   // Crafting the finished item instead, with every material amount, in the city the item is bought in.
@@ -2345,6 +2375,11 @@ $("g-bonus").innerHTML = `<table><thead><tr><th>City</th><th>Crafting +15%</th><
 {
   const h = location.hash.slice(1);
   show(PATHS[h] || ["finder", "guide", "mats", "flips"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")), !!h);
+}
+
+if (LOCAL) {
+  const liveStatus = () => fetch("/local/status").then(r => r.json()).then(st => { $("live").textContent = ` · ${st.feedUp ? "● Live" : "○ Reconnecting"} · ${st.orders.toLocaleString("en-US")} orders${st.filling ? ` · filling (${st.filling} left)` : ""}` }).catch(() => { $("live").textContent = " · ○ Server not responding" });
+  liveStatus(); setInterval(liveStatus, 15000);
 }
 
 boot().catch(() => { $("card").innerHTML = '<p class="empty">The recipe list didn\'t load. Reload the page to try again.</p>' });

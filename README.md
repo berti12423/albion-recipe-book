@@ -13,3 +13,9 @@ Every craftable Albion Online item (3,443 items, every tier and enchantment) wit
 - Prices: the [Albion Online Data Project](https://www.albion-online-data.com/) API, fetched in your browser when you open an item. They come from players running the Albion Data Client, so some items have no recent price.
 
 It's a single static page (`index.html`) with no build step. To run it locally, serve the folder with any static server, for example `python -m http.server`.
+
+## Local price server (optional)
+
+`server/server.mjs` runs on your own PC and serves the site at http://localhost:8740 with live prices. It listens to the Albion Data Project's public Europe feed, keeps every order it sees (with quantities), fills gaps from the normal price API, and saves everything in `server/data/`. The page uses it automatically when opened from that address; the GitHub Pages site keeps working on the public API.
+
+To run it: `cd server`, `npm install`, `node server.mjs`. `server/start-hidden.vbs` runs it with no window and restarts it if it stops; copying that file into the Windows Startup folder starts it at login.

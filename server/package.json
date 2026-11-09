@@ -1,0 +1,7 @@
+{
+  "name": "albion-recipe-book-server",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": { "nats": "2.29.3" }
+}
