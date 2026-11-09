@@ -348,6 +348,9 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
     <label class="fld">Tier<select id="x-tier"><option value="">All tiers</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
     <label class="fld">Enchant steps<select id="x-steps"><option value="3">All combinations (.0→.1 up to .0→.3)</option><option value="2">Up to 2 steps (e.g. .0→.2)</option><option value="1">1 step only (e.g. .0→.1)</option></select></label>
     <label class="fld">Sell by<select id="x-sellby"><option value="order">Sell order (1 silver under)</option><option value="instant">Instant (into buy orders)</option></select></label>
+    <label class="fld">Start from<select id="x-start"></select></label>
+    <label class="fld">Minutes to a neighbouring city<input id="x-hop" type="number" min="1" step="1"></label>
+    <label class="fld">Your time, silver per hour (0 = ignore travel)<input id="x-timeval" type="number" min="0" step="100000"></label>
     <label class="fld">Quality<select id="x-qual"><option value="best">Best for each flip</option><option value="1">Normal</option><option value="2">Good</option><option value="3">Outstanding</option><option value="4">Excellent</option><option value="5">Masterpiece</option></select></label>
     <label class="fld">Silver to spend (0 = no limit)<input id="x-budget" type="number" min="0" step="100000" placeholder="e.g. 2000000"></label>
   </div>
@@ -364,7 +367,7 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   <div class="controls">
     <button class="primary" id="x-scan">Scan prices</button>
     <button id="x-refresh" title="Load every price again instead of reusing recent ones">Refresh prices</button>
-    <label class="chk">Sort by <select id="x-sort"><option value="day">Total profit</option><option value="profit">Profit each</option><option value="margin">Margin</option><option value="grade">Confidence</option></select></label>
+    <label class="chk">Sort by <select id="x-sort"><option value="score">Best after travel time</option><option value="day">Total profit</option><option value="profit">Profit each</option><option value="margin">Margin</option><option value="grade">Confidence</option></select></label>
   </div>
   <p class="note" id="x-note">Pick your cities and filters and press Scan. Prices you loaded recently are reused.</p>
   <div class="flipwrap">
@@ -1574,7 +1577,8 @@ async function fillMats(replace) {
 // Enchant flips: buy an item at a lower enchantment, upgrade it with runes, souls or relics, and sell it.
 // Settings (XF), the tracker (FT) and the materials you already own (XF.owned) live in localStorage.
 let XF = Object.assign({ q: "", cat: "", tier: "", cities: ["Fort Sterling"], steps: "3", sellBy: "order", vol: 5, minProfit: 1, minMargin: 10,
-  age: 24, sort: "day", budget: 0, grade: "D", owned: {}, qual: "best" }, store.get("flips") || {});
+  age: 24, sort: "day", budget: 0, grade: "D", owned: {}, qual: "best", start: "Fort Sterling", hop: 15, timeVal: 1000000 }, store.get("flips") || {});
+if (!XF.sortV) { XF.sort = "score"; XF.sortV = 2 }
 if (!Array.isArray(XF.cities)) XF.cities = [XF.buy && XF.buy !== "*" ? XF.buy : "Fort Sterling"];
 XF.owned ||= {};
 let flipScan = null, flipDetail = null, flipResCache = [];
@@ -1592,13 +1596,37 @@ const sellCities = () => XF.cities.length ? XF.cities : ["Fort Sterling"];
 const QUAL_NAMES = ["Normal", "Good", "Outstanding", "Excellent", "Masterpiece"];
 const flipVol = (h, q) => h && h.volQ ? h.volQ[q - 1] || 0 : 0;
 const qualSplit = h => h && h.volQ ? h.volQ.map((v, i) => `${QUAL_NAMES[i]} ${v > 0 && v < 10 ? v.toFixed(1) : fmt(v)}`).join(" · ") : "";
+// Safe travel between cities, in zones (shortest blue and yellow path in the game's world map; 7 zones between
+// neighbours on the ring FS-LH-BW-ML-TF). Caerleon's are its shortest paths through red zones. Brecilien is reached
+// through the Mists, which the map doesn't fix, so it counts as two neighbours away.
+const ZONES = { "Fort Sterling": { Lymhurst: 7, Thetford: 7, Martlock: 12, Bridgewatch: 14, Caerleon: 6 }, Lymhurst: { Bridgewatch: 7, Martlock: 12, Thetford: 12, Caerleon: 7 },
+  Bridgewatch: { Martlock: 7, Thetford: 14, Caerleon: 7 }, Martlock: { Thetford: 7, Caerleon: 6 }, Thetford: { Caerleon: 7 } };
+const travelCity = c => isBM(c) ? "Caerleon" : c;
+function travelMin(a, b) {
+  a = travelCity(a); b = travelCity(b);
+  if (a === b) return 0;
+  const z = a === "Brecilien" || b === "Brecilien" ? 14 : (ZONES[a] && ZONES[a][b]) || (ZONES[b] && ZONES[b][a]) || 14;
+  return z * (Math.max(1, +XF.hop || 15) / 7);
+}
+// The quickest order to visit every shop, from your start, finishing in the selling city.
+function tourOf(stops, end) {
+  const others = [...new Set(stops.map(travelCity))].filter(c => c !== travelCity(end));
+  let best = null;
+  const go = (at, left, mins, path) => {
+    if (!left.length) { const m = mins + travelMin(at, end); if (!best || m < best.min) best = { min: m, order: [...path, end] }; return }
+    for (const c of left) go(c, left.filter(x => x !== c), mins + travelMin(at, c), [...path, c]);
+  };
+  go(XF.start || "Fort Sterling", others, 0, []);
+  return best;
+}
 const histMemo = new Map();
 const histOf = (loc, pid) => { const k = loc + "|" + pid; if (!histMemo.has(k)) histMemo.set(k, store.get("h:" + k)); return histMemo.get(k) };
 const hoursOld = d => d ? (Date.now() - new Date(d + (d.endsWith("Z") ? "" : "Z")).getTime()) / 36e5 : Infinity;
 
 function setupFlips() {
+  $("x-start").innerHTML = CITIES.map(c => `<option>${c}</option>`).join("");
   $("x-cat").innerHTML = '<option value="">All gear</option>' + FLIP_CATS.map(c => `<option value="${c}">${pretty(c)}</option>`).join("");
-  for (const [id, key, live] of [["x-q", "q", 1], ["x-cat", "cat", 1], ["x-tier", "tier", 1], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-qual", "qual", 1], ["x-vol", "vol", 1],
+  for (const [id, key, live] of [["x-q", "q", 1], ["x-cat", "cat", 1], ["x-tier", "tier", 1], ["x-steps", "steps", 1], ["x-sellby", "sellBy", 1], ["x-qual", "qual", 1], ["x-start", "start", 1], ["x-hop", "hop", 1], ["x-timeval", "timeVal", 1], ["x-vol", "vol", 1],
     ["x-minprofit", "minProfit", 1], ["x-minmargin", "minMargin", 1], ["x-age", "age", 1], ["x-sort", "sort", 1], ["x-budget", "budget", 1], ["x-grade", "grade", 1]]) {
     const el = $(id);
     el.value = XF[key];
@@ -1747,6 +1775,51 @@ function flipGrade(r) {
   return { g, pts, why };
 }
 
+// Weigh profit against travel: try every set of up to three shop cities with every selling city, buying each thing
+// where it's cheapest within that set, and keep the route with the most total profit minus the value of the travel time.
+function routeFlip(e, p, mode, q, limits) {
+  const buyC = buyCities(), pidA = priceId(e.id, p.a), minVol = +XF.vol || 0, rate = (+XF.timeVal || 0) / 60;
+  const item = buyC.map(c => { const x = ((getPrice(c, pidA) || {}).qs || {})[q]; return x && x.s && mode.ok(x.d) ? x : null });
+  const mats = p.ups.map(([mid, cnt]) => ({ mid, cnt, at: buyC.map(c => buyOf(c, mid, mode)) }));
+  const sells = [];
+  for (const s of sellCities()) {
+    const h = histOf(s, priceId(e.id, p.b)), sale = flipSale(priceId(e.id, p.b), s, q, mode, h);
+    if (sale && !["troll", "nosales", "unchecked"].includes(sale.flag) && h && h.volQ[q - 1] >= minVol) sells.push({ s, sale, h });
+  }
+  let best = null, richest = null;
+  for (let mask = 1; mask < 1 << buyC.length; mask++) {
+    let bits = 0; for (let m = mask; m; m &= m - 1) bits++;
+    if (bits > 3) continue;
+    let it = -1, cost = 0, ok = true;
+    for (let i = 0; i < buyC.length; i++) if (mask >> i & 1 && item[i] && (it < 0 || item[i].s < item[it].s)) it = i;
+    if (it < 0) continue;
+    cost = item[it].s;
+    const picks = [];
+    for (const m of mats) {
+      let b = -1;
+      for (let i = 0; i < buyC.length; i++) if (mask >> i & 1 && m.at[i] != null && (b < 0 || m.at[i] < m.at[b])) b = i;
+      if (b < 0) { ok = false; break }
+      cost += m.at[b] * m.cnt; picks.push({ mid: m.mid, cnt: m.cnt, city: buyC[b], v: m.at[b] });
+    }
+    if (!ok) continue;
+    const stops = [buyC[it], ...picks.map(x => x.city)];
+    // Only sets where every city is really used, so the same route isn't priced twice.
+    if (new Set(stops).size !== bits) continue;
+    for (const S2 of sells) {
+      const profit = S2.sale.net - cost, margin = cost > 0 ? profit / cost : null;
+      if (profit < limits.minProfit || margin < limits.minM || (limits.budget > 0 && cost > limits.budget)) continue;
+      const vol = flipVol(S2.h, q);
+      let amount = Math.max(1, Math.floor(vol * 0.2));
+      if (limits.budget > 0) amount = Math.min(amount, Math.floor(limits.budget / cost));
+      if (!amount) continue;
+      const tour = tourOf(stops, S2.s), total = profit * amount, score = total - tour.min * rate;
+      if (!richest || total > richest.total) richest = { total, min: tour.min };
+      if (!best || score > best.score) best = { buy: { item: { city: buyC[it], v: item[it].s, d: item[it].d }, mats: picks, cost }, sell: S2, profit, margin, vol, amount, total, score, tour };
+    }
+  }
+  return best && { ...best, richest };
+}
+
 // raw: every priced flip before the sales check, used to pick which ones to check next.
 // Each flip is tried at every quality (or the one chosen) and keeps the quality that earns the most in total.
 function flipResults(raw) {
@@ -1764,7 +1837,17 @@ function flipResults(raw) {
       const sell = bestSale(e, p, mode, raw, null, q);
       if (!sell) continue;
       const profit = sell.sale.net - buy.cost, margin = buy.cost > 0 ? profit / buy.cost : null;
-      if (!raw && (profit < minProfit || margin < minM || (budget > 0 && buy.cost > budget))) continue;
+      if (!raw && (profit < minProfit || margin < minM)) continue;
+      if (!raw) {
+        // The cheapest-everywhere price passes the filters, so it's worth searching routes.
+        const rt = routeFlip(e, p, mode, q, { minProfit, minM, budget });
+        if (!rt) continue;
+        const r = { e, ...p, q, buy: rt.buy, sellLoc: rt.sell.s, sale: rt.sell.sale, h: rt.sell.h, vol: rt.vol, profit: rt.profit, margin: rt.margin, amount: rt.amount, total: rt.total, score: rt.score, tour: rt.tour, richest: rt.richest };
+        r.grade = flipGrade(r);
+        if (!gradeOk.includes(r.grade.g)) continue;
+        if (!top || r.score > top.score) top = r;
+        continue;
+      }
       // How many to flip: 20% of that quality's daily sales, and no more than your silver covers.
       const vol = flipVol(sell.h, q);
       let amount = vol ? Math.max(1, Math.floor(vol * 0.2)) : null;
@@ -1776,7 +1859,7 @@ function flipResults(raw) {
     }
     if (top) out.push(top);
   }
-  const k = raw ? "profit" : XF.sort, v = r => k === "margin" ? r.margin : k === "profit" ? r.profit : k === "grade" ? r.grade.pts : (r.total ?? -Infinity);
+  const k = raw ? "profit" : XF.sort, v = r => k === "margin" ? r.margin : k === "profit" ? r.profit : k === "grade" ? r.grade.pts : k === "score" ? r.score : (r.total ?? -Infinity);
   return out.sort((a, b) => v(b) - v(a) || b.profit - a.profit);
 }
 
@@ -1796,17 +1879,17 @@ function renderFlips() {
       const it = r.e.it, sel = flipDetail && flipDetail.id === r.e.id && flipDetail.a === r.a && flipDetail.b === r.b;
       const matCities = [...new Set(r.buy.mats.map(m => m.city))].filter(c => c !== r.buy.item.city);
       return `<tr data-i="${i}"${sel ? ' class="sel"' : ""}><td><div class="mat">${icon(priceId(r.e.id, r.b), 32)}<div>${esc(r.e.name)}<span class="age">T${it.t}.${r.a} → T${it.t}.${r.b} · <b>${QUAL_NAMES[r.q - 1]}</b> · ${r.ups.map(([m, c]) => c + " " + matWord(m)).join(" + ")}</span></div></div></td>
-        <td>${cityShort(r.buy.item.city)} → ${cityShort(r.sellLoc)}${matCities.length ? `<span class="age">${matWord(r.ups[0][0])} from ${matCities.map(cityShort).join(", ")}</span>` : ""}${RED.has(r.sellLoc) || RED.has(r.buy.item.city) ? '<span class="age old">red zone</span>' : ""}</td>
+        <td>${cityShort(r.buy.item.city)} → ${cityShort(r.sellLoc)}${matCities.length ? `<span class="age">${matWord(r.ups[0][0])} from ${matCities.map(cityShort).join(", ")}</span>` : ""}${RED.has(r.sellLoc) || RED.has(r.buy.item.city) ? '<span class="age old">red zone</span>' : ""}<span class="age">${r.tour.min ? Math.round(r.tour.min) + " min travel" : "no travel"}</span></td>
         <td class="num">${fmt(r.buy.cost)}</td>
         <td class="num">${fmt(r.sale.v)}<span class="age">${r.sale.flag === "avg" ? "28-day average" : ageText(r.sale.d)?.text || ""}</span></td>
         <td class="num">${signed(r.profit)}<span class="age">${pct(r.margin)}</span></td>
         <td>${gradePill(r.grade)}</td>
         <td class="num" title="${esc(qualSplit(r.h))}">${fmt(r.vol)}<span class="age">of ${fmt(r.h.vol)} total</span></td>
         <td class="num">${r.amount != null ? fmt(r.amount) + `<span class="age">${short(r.amount * r.buy.cost)}</span>` : "—"}</td>
-        <td class="num">${r.total != null ? signed(r.total) : "—"}</td></tr>`;
+        <td class="num">${r.total != null ? signed(r.total) : "—"}${r.tour.min && r.total != null ? `<span class="age">${short(r.total / (r.tour.min / 60))}/h</span>` : ""}</td></tr>`;
     }).join("")}</tbody></table>
-    <p class="note" style="padding:0 12px 12px">Grade A–D: how steady the price is, how fresh the data is, whether it's falling and how complete the sales record is (hover a grade for reasons). Enchanting keeps quality, so each flip buys and sells one quality, using that quality's own prices and sales; hover Sold / day for every quality. Amount is 20% of that quality's daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver` : ""}. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}; transport isn't counted. Click a row for the plan.</p>`;
-  out.querySelectorAll("tr[data-i]").forEach(tr => tr.onclick = () => { const r = res[+tr.dataset.i]; openFlip({ id: r.e.id, a: r.a, b: r.b, n: r.amount || 1, q: r.q }) });
+    <p class="note" style="padding:0 12px 12px">Routes start in ${esc(XF.start)} and weigh total profit against your time (${short(+XF.timeVal || 0)} silver an hour), so a slightly worse price in fewer cities can win. Travel counts safe blue and yellow paths at ${+XF.hop || 15} min between neighbouring cities; several trips for heavy loads aren't counted. Grade A–D: how steady the price is, how fresh the data is, whether it's falling and how complete the sales record is (hover a grade for reasons). Enchanting keeps quality, so each flip buys and sells one quality, using that quality's own prices and sales; hover Sold / day for every quality. Amount is 20% of that quality's daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver` : ""}. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}; transport isn't counted. Click a row for the plan.</p>`;
+  out.querySelectorAll("tr[data-i]").forEach(tr => tr.onclick = () => { const r = res[+tr.dataset.i]; openFlip({ id: r.e.id, a: r.a, b: r.b, n: r.amount || 1, q: r.q, richest: r.richest, pin: { buy: r.buy.item.city, sell: r.sellLoc, mats: Object.fromEntries(r.buy.mats.map(m => [m.mid, m.city])) } }) });
   if (flipDetail) renderFlipDetail();
 }
 
@@ -1883,8 +1966,11 @@ function renderFlipDetail() {
   steps.push(`${isBM(sell.s) || XF.sellBy === "instant" ? "Sell instantly" : "List a sell order"} for <b>${N} × ${Q} T${it.t}.${D.b}</b> in <b>${esc(sell.s)}</b> at <b class="mono">${fmt(listAt)}</b>${sell.sale.flag === "avg" ? ` <span class="age">counted at its 28-day average ${fmt(sell.sale.v)}</span>` : ""} → you keep <b class="mono">${fmt(N * sell.sale.net)}</b> after fees`);
   lines.push(`${sell.s}: ${isBM(sell.s) || XF.sellBy === "instant" ? "sell" : "list"} ${N} × ${Q} T${it.t}.${D.b} ${e.name} @ ${fmt(listAt)}`);
   const total = N * profit + saved;
+  const trip = tourOf([buy.item.city, ...buy.mats.map(m => m.city)], sell.s);
+  const routeLine = `<p class="note"><b>Route:</b> ${esc(XF.start)} → ${trip.order.map(esc).join(" → ")} · <b>${Math.round(trip.min)} min</b> of travel${D.richest && D.richest.total > N * profit + 1 && D.richest.min > trip.min ? `. The cheapest-everywhere route would earn ${signed(D.richest.total - N * profit)} more but take ${Math.round(D.richest.min - trip.min)} min longer.` : ""}</p>`;
   html += `<div class="dsum">${gradePill(grade)} <span class="big">${signed(profit)}</span> each · <b>${signed(total)}</b> for ${N}${saved ? ` <span class="age">incl. ${fmt(saved)} of materials you own</span>` : ""}
     <label class="own">Amount <input type="number" min="1" step="1" id="xd-n" value="${N}"></label></div>
+    ${routeLine}
     ${grade.why.length ? `<p class="note">Grade ${grade.g}: ${esc(grade.why.join("; "))}.</p>` : ""}
     ${sell.h && sell.h.volQ ? `<p class="note">Sold per day by quality in ${esc(sell.s)}: ${esc(qualSplit(sell.h))}.</p>` : ""}
     ${flipVol(sell.h, q) ? `<p class="note">About ${fmt(flipVol(sell.h, q))} ${Q} sell a day in ${esc(sell.s)}; ${N} is ${Math.round(N / flipVol(sell.h, q) * 100)}% of a day's sales${N > flipVol(sell.h, q) * 0.3 ? ' <span class="old">(more than 30%: it may take several days)</span>' : ""}. Silver needed: <b>${fmt(N * buy.cost - saved)}</b>.</p>` : ""}
