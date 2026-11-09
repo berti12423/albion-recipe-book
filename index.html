@@ -369,7 +369,8 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
   </details>
   <div class="controls">
     <button class="primary" id="x-scan">Scan prices</button>
-    <button id="x-refresh" title="Load every price again instead of reusing recent ones">Refresh prices</button>
+    <button id="x-refresh" title="Load the current prices of the flips shown; takes seconds">Refresh shown</button>
+    <button id="x-full" title="Load every price of every item again; can take a couple of minutes">Reload everything</button>
     <label class="chk">Sort by <select id="x-sort"><option value="score">Best after travel time</option><option value="day">Total profit</option><option value="profit">Profit each</option><option value="margin">Margin</option><option value="grade">Confidence</option></select></label>
   </div>
   <p class="note" id="x-note">Pick your cities and filters and press Scan. Prices you loaded recently are reused.</p>
@@ -1005,7 +1006,7 @@ const priceCacheReady = (async () => {
   if (!db) return;
   await new Promise(res => {
     try {
-      const cut = Date.now() - 12 * 36e5, req = db.transaction("prices", "readwrite").objectStore("prices").openCursor();
+      const cut = Date.now() - 72 * 36e5, req = db.transaction("prices", "readwrite").objectStore("prices").openCursor();
       req.onsuccess = () => {
         const c = req.result;
         if (!c) return res();
@@ -1649,10 +1650,12 @@ function setupFlips() {
   };
   drawCities();
   $("x-scan").onclick = () => scanFlips(false);
-  $("x-refresh").onclick = () => scanFlips(true);
+  $("x-refresh").onclick = () => scanFlips("shown");
+  $("x-full").onclick = () => scanFlips("all");
   $("x-tracker-toggle").onclick = () => { $("x-tracker").hidden = !$("x-tracker").hidden; store.set("flipTrackOpen", !$("x-tracker").hidden); renderTracker() };
   $("x-tracker").hidden = !store.get("flipTrackOpen") && !FT.length;
   renderTracker();
+  priceCacheReady.then(() => { if (!flipScan && FETCHED.size) { flipScan = { items: flipItems() }; renderFlips() } });
 }
 
 function flipItems() {
@@ -1677,18 +1680,21 @@ function flipPaths(e) {
   return out;
 }
 
-async function scanFlips(force) {
-  force = force === true;
+async function scanFlips(how) {
+  const shown = how === "shown" && flipResCache.length > 0, force = how === "all" || shown;
   const items = flipItems(), n = $("x-note"), btn = $("x-scan");
   if (!items.length) { n.textContent = "No enchantable items match these filters."; return }
   const locs = [...new Set([...buyCities(), ...sellCities()])];
   const products = new Set(), mats = new Set();
-  for (const e of items) for (const p of flipPaths(e)) {
+  for (const [e, p] of shown ? flipResCache.map(r => [r.e, r]) : items.flatMap(e => flipPaths(e).map(x => [e, x]))) {
     products.add(priceId(e.id, p.a)); products.add(priceId(e.id, p.b)); p.ups.forEach(u => mats.add(u[0]));
     e.it.r[p.b].forEach(r => r.m.forEach(m => withInputs([m[0]]).forEach(y => mats.add(y)))); // to compare with crafting it
   }
   btn.disabled = true;
   const step = what => (i, t, wait) => n.textContent = wait ? "The price server asked us to slow down. Waiting 20 seconds…" : `Loading ${what}… ${i} of ${t}`;
+  // To report how many prices really moved.
+  const snap = () => { const m = new Map(); for (const id of [...products, ...mats]) for (const l of locs) m.set(l + "|" + id, JSON.stringify(PRICES.get(l + "|" + id) ?? null)); return m };
+  const before = shown ? snap() : null;
   try {
     await fetchPrices([...mats], locs, step("rune, soul, relic and material prices"), { persist: false, qualities: "1", force });
     await fetchPrices([...products], locs, step("item prices"), { persist: false, force }); // every quality
@@ -1697,7 +1703,7 @@ async function scanFlips(force) {
     // Check the most promising flips against 28 days of real sales. Each batch loads an item's sales for every chosen
     // city at once: when one city fails the check the flip falls back to its next-best city, which must be known too.
     for (let round = 0; round < 40; round++) {
-      const todo = flipResults(true).filter(r => r.profit > 0 && !(r.h && r.h.lq === 1 && r.h.dv === 4 && Date.now() - r.h.t < 36e5));
+      const todo = flipResults(true).filter(r => r.profit > 0 && !(r.h && r.h.lq === 1 && r.h.dv === 4 && Date.now() - r.h.t < 6 * 36e5));
       if (!todo.length) break;
       const ids = [...new Set(todo.map(r => priceId(r.e.id, r.b)))];
       n.textContent = `Checking real sales… ${ids.length} items left`;
@@ -1706,6 +1712,7 @@ async function scanFlips(force) {
       await new Promise(r => setTimeout(r, 300));
     }
     renderFlips();
+    if (before) { const after = snap(); let changed = 0; for (const [k, v] of after) if (before.get(k) !== v) changed++; n.textContent += ` Refreshed the flips shown: ${changed} of ${after.size} prices changed.` }
   } catch (err) {
     n.textContent = err instanceof TypeError ? "Couldn't reach the price server. Check your connection and try again." : err.message;
   }
@@ -1917,14 +1924,30 @@ function renderFlips() {
 // ---------- detail panel ----------
 function openFlip(d) {
   flipDetail = { pin: {}, ...d };
+  freshenFlip(d);
   $("x-detail").hidden = false;
   document.querySelectorAll(".fliptable tr.sel").forEach(t => t.classList.remove("sel"));
   renderFlipDetail();
   // Load 28 days of sales for every level of this item in every chosen city, so the whole ladder is checked.
   const e = DB.list.find(x => x.id === d.id), ids = Object.keys(e.it.r).map(l => priceId(e.id, l));
   const locs = sellCities().filter(c => !isBM(c));
-  if (locs.length && ids.some(id => locs.some(l => { const h = store.get("h:" + l + "|" + id); return !h || h.dv !== 4 || Date.now() - h.t > 36e5 })))
+  if (locs.length && ids.some(id => locs.some(l => { const h = store.get("h:" + l + "|" + id); return !h || h.dv !== 4 || Date.now() - h.t > 6 * 36e5 })))
     fetchHistory(ids, locs).then(() => { if (flipDetail && flipDetail.id === d.id) renderFlipDetail() }).catch(() => {});
+}
+
+const flipFresh = new Map();
+async function freshenFlip(d) {
+  const key = d.id + "|" + XF.cities.join(), last = flipFresh.get(key) || 0;
+  if (Date.now() - last < 18e4) return;
+  flipFresh.set(key, Date.now());
+  const e = DB.list.find(x => x.id === d.id), locs = [...new Set([...buyCities(), ...sellCities()])];
+  const items = Object.keys(e.it.r).filter(l => +l <= 3).map(l => priceId(e.id, l));
+  const mats = [...new Set(Object.keys(e.it.r).flatMap(l => e.it.r[l][0].u ? [e.it.r[l][0].u[0]] : []))];
+  try {
+    await fetchPrices(items, locs, null, { persist: false, force: true });
+    await fetchPrices(mats, locs, null, { persist: false, qualities: "1", force: true });
+    if (flipDetail && flipDetail.id === d.id) renderFlips();
+  } catch {}
 }
 
 function flipPlan() {
@@ -1970,7 +1993,7 @@ function renderFlipDetail() {
   const profit = sell.sale.net - buy.cost, grade = flipGrade({ h: sell.h, sale: sell.sale, buy });
   const owned = mid => Math.max(0, +XF.owned[mid] || 0);
   const steps = [], lines = [];
-  steps.push(`Buy <b>${N} × ${Q} T${it.t}.${D.a} ${esc(e.name)}</b> in <b>${esc(buy.item.city)}</b> at up to <b class="mono">${fmt(buy.item.v)}</b> each → ${fmt(N * buy.item.v)}`);
+  steps.push(`Buy <b>${N} × ${Q} T${it.t}.${D.a} ${esc(e.name)}</b> in <b>${esc(buy.item.city)}</b> at up to <b class="mono">${fmt(buy.item.v)}</b> each${ageText(buy.item.d) ? ` <span class="${ageText(buy.item.d).old ? "old" : ""}">(listed ${ageText(buy.item.d).text})</span>` : ""} → ${fmt(N * buy.item.v)}`);
   lines.push(`${buy.item.city}: ${N} × ${Q} T${it.t}.${D.a} ${e.name} ≤ ${fmt(buy.item.v)}`);
   let saved = 0;
   for (const m of buy.mats) {
