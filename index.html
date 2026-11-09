@@ -192,6 +192,9 @@ nav.tabs .pct { font: .78rem var(--mono); color: var(--accent); margin-left: 6px
 .pill.grade { font: 700 .8rem var(--mono); padding: 1px 8px }
 .pill.gA { color: var(--good) } .pill.gB { color: var(--e2) } .pill.gC { color: var(--accent) } .pill.gD { color: var(--warn) }
 .fliptable tr[data-i] { cursor: pointer }
+.fliptable tr.subflip td:first-child { padding-left: 30px }
+.fliptable tr.subflip { background: var(--bg) }
+.fliptable .xmore { display: block; font-size: .8rem; margin-top: 2px }
 .fliptable tr[data-i]:hover, .fliptable tr.sel { background: var(--accent-soft) }
 .fliptable thead th { position: sticky; top: 0; background: var(--panel); z-index: 1 }
 .tracker { padding: 14px 16px; margin-top: 4px }
@@ -1582,6 +1585,7 @@ if (!XF.sortV) { XF.sort = "score"; XF.sortV = 2 }
 if (!Array.isArray(XF.cities)) XF.cities = [XF.buy && XF.buy !== "*" ? XF.buy : "Fort Sterling"];
 XF.owned ||= {};
 let flipScan = null, flipDetail = null, flipResCache = [];
+const flipOpen = new Set(); // groups showing their other starting enchantments
 let FT = store.get("flipTrack") || [];
 const saveXF = () => store.set("flips", XF), saveFT = () => store.set("flipTrack", FT);
 const FLIP_CATS = ["weapons", "head", "armors", "shoes", "offhands", "capes", "bags", "gathering"];
@@ -1871,14 +1875,20 @@ function renderFlips() {
   renderTracker();
   if (!flipScan) { out.innerHTML = ""; return }
   const res = flipResCache = flipResults();
+  // One row per finished item at one quality: its best starting enchantment first, the others folded under it.
+  const groups = [], byKey = new Map();
+  res.forEach((r, i) => {
+    const key = r.e.id + "|" + r.b + "|" + r.q;
+    if (byKey.has(key)) byKey.get(key).rest.push(i);
+    else { const g = { key, lead: i, rest: [] }; byKey.set(key, g); groups.push(g) }
+  });
   const unscanned = flipItems().filter(e => !flipScan.items.includes(e)).length;
-  n.textContent = `${res.length} profitable flips, checked against real sales, that sell at least ${+XF.vol || 0} a day at their quality${+XF.budget ? ` and cost under ${short(+XF.budget)} each` : ""}, using ${XF.cities.join(", ")}.${unscanned ? ` ${unscanned} matching items weren't in the last scan; press Scan to load their prices.` : ""}`;
+  n.textContent = `${groups.length} items to flip (${res.length} routes), checked against real sales, that sell at least ${+XF.vol || 0} a day at their quality${+XF.budget ? ` and cost under ${short(+XF.budget)} each` : ""}, using ${XF.cities.join(", ")}.${unscanned ? ` ${unscanned} matching items weren't in the last scan; press Scan to load their prices.` : ""}`;
   if (!res.length) { out.innerHTML = '<p class="empty">No flip passes these filters right now. Try more cities, more enchant steps, a lower minimum, a longer max data age or a lower grade.</p>'; return }
-  out.innerHTML = `<table class="fliptable"><thead><tr><th>Item</th><th>Route</th><th class="num">Cost</th><th class="num">Sells for</th><th class="num">Profit each</th><th>Grade</th><th class="num">Sold / day</th><th class="num">Amount</th><th class="num">Total</th></tr></thead><tbody>
-    ${res.slice(0, 300).map((r, i) => {
+  const flipRow = (r, i, sub, more) => {
       const it = r.e.it, sel = flipDetail && flipDetail.id === r.e.id && flipDetail.a === r.a && flipDetail.b === r.b;
       const matCities = [...new Set(r.buy.mats.map(m => m.city))].filter(c => c !== r.buy.item.city);
-      return `<tr data-i="${i}"${sel ? ' class="sel"' : ""}><td><div class="mat">${icon(priceId(r.e.id, r.b), 32)}<div>${esc(r.e.name)}<span class="age">T${it.t}.${r.a} → T${it.t}.${r.b} · <b>${QUAL_NAMES[r.q - 1]}</b> · ${r.ups.map(([m, c]) => c + " " + matWord(m)).join(" + ")}</span></div></div></td>
+      return `<tr data-i="${i}" class="${sel ? "sel" : ""}${sub ? " subflip" : ""}"><td><div class="mat">${icon(priceId(r.e.id, r.b), 32)}<div>${esc(r.e.name)}<span class="age">T${it.t}.${r.a} → T${it.t}.${r.b} · <b>${QUAL_NAMES[r.q - 1]}</b> · ${r.ups.map(([m, c]) => c + " " + matWord(m)).join(" + ")}</span>${more}</div></div></td>
         <td>${cityShort(r.buy.item.city)} → ${cityShort(r.sellLoc)}${matCities.length ? `<span class="age">${matWord(r.ups[0][0])} from ${matCities.map(cityShort).join(", ")}</span>` : ""}${RED.has(r.sellLoc) || RED.has(r.buy.item.city) ? '<span class="age old">red zone</span>' : ""}<span class="age">${r.tour.min ? Math.round(r.tour.min) + " min travel" : "no travel"}</span></td>
         <td class="num">${fmt(r.buy.cost)}</td>
         <td class="num">${fmt(r.sale.v)}<span class="age">${r.sale.flag === "avg" ? "28-day average" : ageText(r.sale.d)?.text || ""}</span></td>
@@ -1887,9 +1897,20 @@ function renderFlips() {
         <td class="num" title="${esc(qualSplit(r.h))}">${fmt(r.vol)}<span class="age">of ${fmt(r.h.vol)} total</span></td>
         <td class="num">${r.amount != null ? fmt(r.amount) + `<span class="age">${short(r.amount * r.buy.cost)}</span>` : "—"}</td>
         <td class="num">${r.total != null ? signed(r.total) : "—"}${r.tour.min && r.total != null ? `<span class="age">${short(r.total / (r.tour.min / 60))}/h</span>` : ""}</td></tr>`;
+  };
+  out.innerHTML = `<table class="fliptable"><thead><tr><th>Item</th><th>Route</th><th class="num">Cost</th><th class="num">Sells for</th><th class="num">Profit each</th><th>Grade</th><th class="num">Sold / day</th><th class="num">Amount</th><th class="num">Total</th></tr></thead><tbody>
+    ${groups.slice(0, 300).map(g => {
+      const key = g.key, rest = g.rest, open = flipOpen.has(key);
+      const more = rest.length ? `<button class="link xmore" data-g="${esc(key)}">${open ? "Hide" : "+" + rest.length} other start${rest.length > 1 ? "s" : ""}</button>` : "";
+      return flipRow(res[g.lead], g.lead, false, more) + (open ? rest.map(i => flipRow(res[i], i, true, "")).join("") : "");
     }).join("")}</tbody></table>
     <p class="note" style="padding:0 12px 12px">Routes start in ${esc(XF.start)} and weigh total profit against your time (${short(+XF.timeVal || 0)} silver an hour), so a slightly worse price in fewer cities can win. Travel counts safe blue and yellow paths at ${+XF.hop || 15} min between neighbouring cities; several trips for heavy loads aren't counted. Grade A–D: how steady the price is, how fresh the data is, whether it's falling and how complete the sales record is (hover a grade for reasons). Enchanting keeps quality, so each flip buys and sells one quality, using that quality's own prices and sales; hover Sold / day for every quality. Amount is 20% of that quality's daily sales${+XF.budget ? `, capped by your ${short(+XF.budget)} silver` : ""}. Profit is after ${S.premium ? "4%" : "8%"} tax${XF.sellBy === "order" ? " and the 2.5% listing fee" : ""}; transport isn't counted. Click a row for the plan.</p>`;
   out.querySelectorAll("tr[data-i]").forEach(tr => tr.onclick = () => { const r = res[+tr.dataset.i]; openFlip({ id: r.e.id, a: r.a, b: r.b, n: r.amount || 1, q: r.q, richest: r.richest, pin: { buy: r.buy.item.city, sell: r.sellLoc, mats: Object.fromEntries(r.buy.mats.map(m => [m.mid, m.city])) } }) });
+  out.querySelectorAll(".xmore").forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    flipOpen.has(b.dataset.g) ? flipOpen.delete(b.dataset.g) : flipOpen.add(b.dataset.g);
+    renderFlips();
+  });
   if (flipDetail) renderFlipDetail();
 }
 
