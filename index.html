@@ -2002,6 +2002,11 @@ function flipResults(raw) {
     }
     if (top) out.push(top);
   }
+  if (!raw && LOCAL && mode.buyBy !== "order")
+    for (const r of out.filter(r => r.amount).sort((a, b) => b.score - a.score).slice(0, 40)) {
+      const cut = bookCut(r);
+      if (cut) { r.bookCut = cut; r.total -= cut; r.score -= cut }
+    }
   const k = raw ? "profit" : XF.sort, v = r => k === "margin" ? r.margin : k === "profit" ? r.profit : k === "grade" ? r.grade.pts : k === "score" ? r.score : (r.total ?? -Infinity);
   return out.sort((a, b) => v(b) - v(a) || b.profit - a.profit);
 }
@@ -2042,7 +2047,7 @@ function renderFlips() {
       <td>${gradePill(r.grade)}</td>
       <td class="num" title="${esc(qualSplit(r.h))}">${fmt(r.vol)}</td>
       <td class="num">${r.amount != null ? fmt(r.amount) + `<span class="age">${short(r.amount * r.buy.cost)}</span>` : "—"}</td>
-      <td class="num">${r.total != null ? signed(r.total) : "—"}</td></tr>`;
+      <td class="num" title="${r.bookCut ? esc("Buying " + r.amount + " costs " + fmt(Math.round(r.bookCut)) + " more than all at the cheapest listing, from the live order book") : ""}">${r.total != null ? signed(r.total) : "—"}${r.bookCut ? `<span class="age">order book −${short(r.bookCut)}</span>` : ""}</td></tr>`;
   };
   out.innerHTML = `<table class="fliptable"><thead><tr><th>Item</th><th>Route</th><th class="num">Cost</th><th class="num">Sells for</th><th class="num">Profit each</th><th>Grade</th><th class="num">Sold / day</th><th class="num">Amount</th><th class="num">Total</th></tr></thead><tbody>
     ${groups.slice(0, 300).map(g => {
@@ -2332,11 +2337,21 @@ function bookFor(id, city, q) {
   if (!c || !c.busy) {
     bookCache.set(k, { t: 0, list: c ? c.list : null, busy: true });
     fetch(`/local/orders?id=${encodeURIComponent(id)}&city=${encodeURIComponent(city)}&q=${q}`).then(r => r.json())
-      .then(list => { bookCache.set(k, { t: Date.now(), list }); if (flipDetail) renderFlipDetail() })
+      .then(list => { bookCache.set(k, { t: Date.now(), list }); bookLoaded() })
       .catch(() => bookCache.set(k, { t: Date.now(), list: null }));
   }
   return c ? c.list : null;
 }
+// Extra silver over "all at the cheapest listing" for one flip's buys, from the order books loaded so far.
+function bookCut(r) {
+  let x = 0;
+  const add = (list, n, v) => { if (!n || !list || !list.length) return; const w = walkBook(list, n); x += w.cost + w.short * w.last - n * v };
+  add(bookFor(priceId(r.e.id, r.a), r.buy.item.city, r.q), r.amount, r.buy.item.v);
+  for (const m of r.buy.mats) { const need = m.cnt * r.amount; add(bookFor(m.mid, m.city, 1), need - Math.min(Math.max(0, +XF.owned[m.mid] || 0), need), m.v) }
+  return Math.max(0, x);
+}
+let bookTimer = 0;
+const bookLoaded = () => { clearTimeout(bookTimer); bookTimer = setTimeout(() => { if (!flipDetail || flipDetail.auto) renderFlips(); else renderFlipDetail() }, 300) };
 function walkBook(list, n) {
   let left = n, cost = 0;
   const parts = [];
