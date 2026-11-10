@@ -190,6 +190,7 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
 .job { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; scroll-margin-top: 10px }
 .jhead { display: flex; align-items: center; gap: 12px; padding: 14px 16px 0 }
 .jhead .t { flex: 1; min-width: 0 }
+.jfresh { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right }
 .jhead h3 { font: 700 1.45rem/1.15 var(--display); margin: 0 }
 .job .tag { font: 500 .78rem var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--accent) }
 .jmsg { padding: 8px 16px }
@@ -2140,9 +2141,9 @@ function walkBook(list, n) {
   return { parts, cost, short: left, last: parts.length ? parts.at(-1)[1] : null };
 }
 const flipFresh = new Map();
-async function freshenFlip(d) {
+async function freshenFlip(d, force) {
   const key = d.id + "|" + XF.cities.join(), last = flipFresh.get(key) || 0;
-  if (Date.now() - last < 18e4) return;
+  if (!force && Date.now() - last < 18e4) return;
   flipFresh.set(key, Date.now());
   const e = DB.list.find(x => x.id === d.id), locs = [...new Set([...buyCities(), ...sellCities()])];
   const items = Object.keys(e.it.r).filter(l => +l <= 3).map(l => priceId(e.id, l));
@@ -2150,8 +2151,13 @@ async function freshenFlip(d) {
   try {
     await fetchPrices(items, locs, null, { persist: false, force: true });
     await fetchPrices(mats, locs, null, { persist: false, qualities: "1", force: true });
-    if (flipDetail && flipDetail.id === d.id) renderFlips();
-  } catch {}
+    if (flipDetail && flipDetail.id === d.id) { flipDetail.fresh = Date.now(); flipDetail.freshErr = false; renderFlips() }
+    return true;
+  } catch {
+    flipFresh.delete(key);
+    if (flipDetail && flipDetail.id === d.id) { flipDetail.freshErr = true; renderFlipDetail() }
+    return false;
+  }
 }
 
 function flipPlan() {
@@ -2197,7 +2203,7 @@ function renderFlipDetail() {
     ${qRows.map(x => `<tr data-q="${x.i}" class="${x.i === q ? "qpick" : ""}"><th>${QUAL_NAMES[x.i - 1]}</th><td class="num">${fmt(x.b.cost)}</td><td class="num">${fmt(x.sl.sale.v)}</td><td class="num">${signed(x.pf)}</td><td class="num">${x.vol ? fmt(x.vol) : "—"}</td><td class="num">${x.total != null ? signed(x.total) : "—"}</td></tr>`).join("")}
     </tbody></table></div><p class="note">Enchanting keeps quality, so you buy and sell the same one. Click a quality to plan the flip at it.</p>`;
   const fold = (k, title, body) => body ? `<details class="fold" data-k="${k}"${(D.open || {})[k] ? " open" : ""}><summary>${title}</summary>${body}</details>` : "";
-  const head = `<div class="jhead">${icon(priceId(e.id, D.b), 48)}<div class="t"><span class="tag">${D.auto ? "Recommended next" : tracked ? "In progress" : "Your pick"}</span><h3>Flip ${N} × ${Q} ${esc(e.name)}</h3><span class="sub">T${it.t}.${D.a} → T${it.t}.${D.b}</span></div>${D.auto ? "" : '<button class="link" id="xd-close" aria-label="Close and go back to the recommended flip">✕</button>'}</div>`;
+  const head = `<div class="jhead">${icon(priceId(e.id, D.b), 48)}<div class="t"><span class="tag">${D.auto ? "Recommended next" : tracked ? "In progress" : "Your pick"}</span><h3>Flip ${N} × ${Q} ${esc(e.name)}</h3><span class="sub">T${it.t}.${D.a} → T${it.t}.${D.b}</span></div><div class="jfresh"><button id="xd-refresh" title="Load the current prices of this item and its runes, souls and relics">↻ Refresh prices</button><span class="sub">${D.freshErr ? '<span class="old">Couldn\'t load prices, try again</span>' : D.fresh ? "Updated " + (Date.now() - D.fresh < 6e4 ? "just now" : Math.round((Date.now() - D.fresh) / 6e4) + " min ago") : ""}</span></div>${D.auto ? "" : '<button class="link" id="xd-close" aria-label="Close and go back to the recommended flip">✕</button>'}</div>`;
   if (!buy || !sell) {
     box.innerHTML = head + `<p class="jmsg">${!buy ? "Some prices for the lower item or the runes, souls or relics are missing in these cities." : "No checked sale price for the finished item in these cities yet."} Try more cities, or press Scan prices.</p><div class="folds">${fold("cities", "Compare cities", ladder)}${fold("qual", "Other qualities", qRows.length ? qualTable : "")}</div>`;
     wireDetail();
@@ -2221,7 +2227,7 @@ function renderFlipDetail() {
   for (const m of buy.mats) {
     const need = m.cnt * N, have = Math.min(owned(m.mid), need), get = need - have;
     saved += have * m.v;
-    rowsBuy.push(`<tr><td><span class="qty">${fmt(get)}</span> × ${esc(nameOf(m.mid))}<label class="own">I own <input type="number" min="0" step="1" data-own="${m.mid}" value="${XF.owned[m.mid] || ""}" placeholder="0"></label></td><td>${esc(m.city)}</td><td class="r"><b class="pay">${fmt(m.v)}</b></td><td class="r mono">${fmt(get * m.v)}</td><td class="r"><span class="limit">above ${fmt(Math.floor(m.v + profit / m.cnt))}</span></td></tr>`);
+    rowsBuy.push(`<tr><td><span class="qty">${fmt(get)}</span> × ${esc(nameOf(m.mid))}<label class="own">I own <input type="number" min="0" step="1" data-own="${m.mid}" value="${XF.owned[m.mid] || ""}" placeholder="0"></label></td><td>${esc(m.city)}</td><td class="r"><b class="pay">${fmt(m.v)}</b>${(() => { const a = ageText((getPrice(m.city, m.mid) || {}).d); return a ? `<span class="age ${a.old ? "old" : ""}">${a.text}</span>` : "" })()}</td><td class="r mono">${fmt(get * m.v)}</td><td class="r"><span class="limit">above ${fmt(Math.floor(m.v + profit / m.cnt))}</span></td></tr>`);
     if (get) { checkBook(bookFor(m.mid, m.city, 1), nameOf(m.mid), get, m.v); lines.push(`${m.city}: ${fmt(get)} × ${nameOf(m.mid)} ≤ ${fmt(m.v)}`) }
   }
   const listAt = isBM(sell.s) || XF.sellBy === "instant" ? sell.sale.v : Math.max(1, (sell.sale.listed || sell.sale.v) - 1), instantSale = isBM(sell.s) || XF.sellBy === "instant";
@@ -2281,6 +2287,7 @@ function renderFlipDetail() {
 function wireDetail(ctx) {
   const box = $("x-detail"), D = flipDetail;
   if ($("xd-close")) $("xd-close").onclick = () => { flipDetail = null; renderFlips() };
+  $("xd-refresh").onclick = async () => { const b = $("xd-refresh"); b.disabled = true; b.textContent = "Refreshing…"; D.auto = false; await freshenFlip(D, true) };
   box.querySelectorAll("details[data-k]").forEach(d => d.ontoggle = () => { (D.open ??= {})[d.dataset.k] = d.open });
   box.querySelectorAll("tr[data-q]").forEach(tr => tr.onclick = () => { D.q = +tr.dataset.q; D.auto = false; renderFlipDetail() });
   box.querySelectorAll("td[data-role]").forEach(td => td.onclick = () => {
