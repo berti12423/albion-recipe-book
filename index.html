@@ -2079,6 +2079,7 @@ function relistFlip(f, v) {
   if (v < 1) return;
   const keep = f.plan.sale ? f.plan.net / f.plan.sale : 1;
   f.plan.sale0 ??= f.plan.sale;
+  f.plan.lost = (f.plan.lost || 0) + SETUP * (f.plan.listAt || f.plan.sale);
   f.plan.listAt = v; f.plan.sale = v; f.plan.net = v * keep;
   f.relists = (f.relists || 0) + 1;
   f.t.listed = Date.now();
@@ -2280,7 +2281,7 @@ function renderFinish() {
     const todo = f.state === "planned" ? `Buy ${f.n} × ${Q}T${e.t}.${f.a} in <b>${esc(f.buyCity)}</b>${prog}`
       : f.state === "bought" ? `Enchant ${f.n} to .${f.b} at the Artifact Foundry`
       : f.state === "enchanted" ? `List ${f.n} in <b>${esc(f.sellCity)}</b> at <b class="mono">${fmt(listAt)}</b>`
-      : undercut ? `<span class="old">Undercut:</span> someone lists at ${fmt(nb.nowV)}. Relist at <b class="mono">${fmt(nb.nowV - 1)}</b>; total profit becomes ${signed(f.n * ((nb.nowV - 1) * keep - nb.cost))}.`
+      : undercut ? `<span class="old">Undercut:</span> someone lists at ${fmt(nb.nowV)}. Relist at <b class="mono">${fmt(nb.nowV - 1)}</b>; total profit becomes ${signed(f.n * ((nb.nowV - 1) * keep - nb.cost - SETUP * listAt))} after another 2.5% listing fee.`
       : `Waiting to sell in ${esc(f.sellCity)}${hrs != null ? `, listed ${hrs ? hrs + " h" : "under an hour"} ago` : ""}`;
     return `<li data-i="${FT.indexOf(f)}">${icon(priceId(f.id, f.b), 32)}<div class="who"><b>${f.n} × ${esc(nameOf(f.id))}</b><span class="sub">${Q}T${e.t}.${f.a} → .${f.b}</span></div><div class="todo">${todo}</div>${undercut ? `<button class="primary" data-relist="${nb.nowV - 1}">Relisted at ${fmt(nb.nowV - 1)}</button>` : ""}<button class="${f.state === "listed" ? "" : "primary"}" data-go="1">${BTN[f.state]}</button></li>`;
   }).join("")}</ul>`;
@@ -2437,8 +2438,8 @@ function renderFlipDetail() {
       <div class="acts"><button class="primary" data-step="buy">I bought it all</button>${tracked ? "" : '<button data-step="save">Save for later</button>'}<button id="xd-copy">Copy shopping list</button></div>`),
     stepItem(1, "Enchant", `${N} at the Artifact Foundry`, `${carry}<p>${buy.mats.map((m, i) => `.${+D.a + i} → .${+D.a + i + 1} with <b>${m.cnt} ${matWord(m.mid)}</b> each`).join(", then ")}. Put in only as many items as you have materials for.</p>${(() => { const take = buy.mats.map(m => [m.mid, Math.min(owned(m.mid), m.cnt * N)]).filter(x => x[1]); return take.length ? `<p class="calm">Pressing Enchanted takes ${take.map(([m, n]) => `${fmt(n)} ${esc(nameOf(m))}`).join(", ")} out of My materials.</p>` : "" })()}<div class="acts"><button class="primary" data-step="next">Enchanted</button></div>`),
     stepItem(2, instantSale ? "Sell" : "List", `${N} in ${esc(sell.s)}`, `<p>${instantSale ? "Sell instantly" : "List a sell order"} at <b class="pay">${fmt(listAt)}</b>${sell.sale.flag === "avg" ? ` <span class="age" style="display:inline">counted at its usual price of ${fmt(sell.sale.v)}</span>` : ""}. You keep <b class="mono">${fmt(N * sell.sale.net)}</b> after fees.</p><div class="acts"><button class="primary" data-step="next">${instantSale ? "Sold" : "Listed"}</button></div>`),
-    stepItem(3, "Collect", "when they sell", `<div class="acts"><label class="own">Listed at <input type="number" id="xd-listed" min="1" value="${Math.round(tracked && tracked.plan.listAt || listAt)}"></label><button data-step="relist">Update price</button>${tracked && tracked.relists ? `<span class="calm">relisted ${tracked.relists}×</span>` : ""}</div>
-      <p class="calm">Undercut? Type your new price and press Update price. The profit of this flip follows it.</p>
+    stepItem(3, "Collect", "when they sell", `<div class="acts"><label class="own">Listed at <input type="number" id="xd-listed" min="1" value="${Math.round(tracked && tracked.plan.listAt || listAt)}"></label><button data-step="relist">Update price</button>${tracked && tracked.relists ? `<span class="calm">relisted ${tracked.relists}× · ${fmt(Math.round(tracked.n * tracked.plan.lost))} in extra listing fees</span>` : ""}</div>
+      <p class="calm">Undercut? Type your new price and press Update price. Each relist pays the 2.5% listing fee again; the tax is only paid once, when it sells.${tracked ? ` Expected profit now: <b class="mono ${trackerNumbers(tracked).expected < 0 ? "old" : "pos"}">${signed(trackerNumbers(tracked).expected)}</b>.` : ""}</p>
       <div class="acts"><label class="own">Sold at <input type="number" id="xd-sold" value="${Math.round(tracked && tracked.plan.listAt || listAt)}"></label><button class="primary" data-step="next">All sold</button></div>`)
   ];
   const facts = `<dl class="facts">
@@ -2532,12 +2533,12 @@ const FT_STATES = ["planned", "bought", "enchanted", "listed", "sold"];
 const FT_NEXT = { planned: "Mark bought", bought: "Mark enchanted", enchanted: "Mark listed", listed: "Mark sold" };
 function trackerNumbers(f) {
   const feeKeep = f.plan.sale ? f.plan.net / f.plan.sale : 1 - TAX() - SETUP;
-  const cost = (f.paid ?? f.plan.cost);
+  const cost = (f.paid ?? f.plan.cost) + (f.plan.lost || 0);
   const soldNet = f.sold != null ? f.sold * feeKeep : null;
   const pid = priceId(f.id, f.b), now = getPrice(f.sellCity, pid);
   const at = f.q && now && now.qs ? now.qs[f.q] || {} : now; // the tracked quality's own price, when known
   const nowV = at ? (isBM(f.sellCity) ? at.b : at.s) : null;
-  return { cost, expected: f.n * (f.plan.net - f.plan.cost), actual: soldNet != null ? f.n * (soldNet - cost) : null, nowV, nowD: at && (isBM(f.sellCity) ? at.bd : at.d) };
+  return { cost, expected: f.n * (f.plan.net - f.plan.cost - (f.plan.lost || 0)), actual: soldNet != null ? f.n * (soldNet - cost) : null, nowV, nowD: at && (isBM(f.sellCity) ? at.bd : at.d) };
 }
 function renderTracker() {
   const box = $("x-tracker");
