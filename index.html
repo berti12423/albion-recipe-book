@@ -2038,6 +2038,18 @@ const trackedFlip = D => FT.find(f => !f.archived && f.state !== "sold" && f.id 
 function advanceFlip(f) {
   f.state = FT_STATES[FT_STATES.indexOf(f.state) + 1];
   f.t[f.state] = Date.now();
+  if (f.state === "enchanted" && !f.used) {
+    f.used = {};
+    for (const [mid, cnt] of f.mats) {
+      const use = Math.min(Math.max(0, +XF.owned[mid] || 0), cnt * f.n);
+      if (!use) continue;
+      f.used[mid] = use;
+      const left = XF.owned[mid] - use;
+      if (left > 0) XF.owned[mid] = left; else delete XF.owned[mid];
+    }
+    saveXF();
+    renderStock();
+  }
   if (f.state === "sold" && f.sold == null) f.sold = f.plan.sale;
   saveFT();
   renderFlips();
@@ -2228,7 +2240,7 @@ function renderFlipDetail() {
       ${noLive ? `<p class="calm">No live quantities yet for ${noLive === rowsBuy.length ? "these" : noLive + " of these"}; check how many are listed in game.</p>` : ""}
       ${thin ? `<p class="old">Only about ${va < 10 ? va.toFixed(1) : fmt(va)} of these ${Q} .${D.a} trade a day in ${esc(buy.item.city)}, so buying ${N} may take days or cost more.</p>` : ""}
       <div class="acts"><button class="primary" data-step="buy">I bought it all</button>${tracked ? "" : '<button data-step="save">Save for later</button>'}<button id="xd-copy">Copy shopping list</button></div>`),
-    stepItem(1, "Enchant", `${N} at the Artifact Foundry`, `${carry}<p>${buy.mats.map((m, i) => `.${+D.a + i} → .${+D.a + i + 1} with <b>${m.cnt} ${matWord(m.mid)}</b> each`).join(", then ")}. Put in only as many items as you have materials for.</p><div class="acts"><button class="primary" data-step="next">Enchanted</button></div>`),
+    stepItem(1, "Enchant", `${N} at the Artifact Foundry`, `${carry}<p>${buy.mats.map((m, i) => `.${+D.a + i} → .${+D.a + i + 1} with <b>${m.cnt} ${matWord(m.mid)}</b> each`).join(", then ")}. Put in only as many items as you have materials for.</p>${(() => { const take = buy.mats.map(m => [m.mid, Math.min(owned(m.mid), m.cnt * N)]).filter(x => x[1]); return take.length ? `<p class="calm">Pressing Enchanted takes ${take.map(([m, n]) => `${fmt(n)} ${esc(nameOf(m))}`).join(", ")} out of My materials.</p>` : "" })()}<div class="acts"><button class="primary" data-step="next">Enchanted</button></div>`),
     stepItem(2, instantSale ? "Sell" : "List", `${N} in ${esc(sell.s)}`, `<p>${instantSale ? "Sell instantly" : "List a sell order"} at <b class="pay">${fmt(listAt)}</b>${sell.sale.flag === "avg" ? ` <span class="age" style="display:inline">counted at its usual price of ${fmt(sell.sale.v)}</span>` : ""}. You keep <b class="mono">${fmt(N * sell.sale.net)}</b> after fees.</p><div class="acts"><button class="primary" data-step="next">${instantSale ? "Sold" : "Listed"}</button></div>`),
     stepItem(3, "Collect", "when they sell", `<div class="acts"><label class="own">Sold at <input type="number" id="xd-sold" value="${Math.round(tracked && tracked.plan.listAt || listAt)}"></label><button class="primary" data-step="next">All sold</button></div>`)
   ];
@@ -2367,7 +2379,7 @@ function renderTracker() {
       if (a === "next") return advanceFlip(f);
       if (a === "del") { if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Sure?"; return } FT.splice(FT.indexOf(f), 1) }
       else if (a === "archive") f.archived = true;
-      else if (a === "dup") FT.unshift({ ...structuredClone(f), k: Date.now(), paid: null, sold: null, archived: false, state: "planned", t: { planned: Date.now() } });
+      else if (a === "dup") FT.unshift({ ...structuredClone(f), k: Date.now(), paid: null, sold: null, archived: false, state: "planned", used: null, t: { planned: Date.now() } });
       else if (a === "open") { openFlip({ id: f.id, a: f.a, b: f.b, n: f.n, q: f.q || 1, pin: { buy: f.buyCity, sell: f.sellCity, mats: Object.fromEntries(f.mats.map(m => [m[0], m[2]])) } }); $("x-detail").scrollIntoView({ behavior: "smooth", block: "start" }); return }
       saveFT(); renderTracker();
     });
