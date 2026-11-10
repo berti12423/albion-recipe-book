@@ -182,7 +182,8 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
 .band { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 4px }
 .band h3 { font: 500 .85rem var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 }
 .finish { list-style: none; margin: 8px 0 0; padding: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px }
-.finish li { display: grid; grid-template-columns: 32px minmax(180px, 260px) minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer }
+.finish li > button { grid-row: 1 } .finish li > button[data-relist] { grid-column: 4 } .finish li > button[data-go] { grid-column: 5 }
+.finish li { display: grid; grid-template-columns: 32px minmax(180px, 260px) minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); cursor: pointer }
 .finish li:last-child { border-bottom: 0 }
 .finish li:hover { background: var(--accent-soft) }
 .finish .who b { font-weight: 500; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
@@ -2073,6 +2074,17 @@ function pickFlips(leads) {
 // ---------- flips in progress: one sentence and one button each ----------
 const buyTargets = (n, mats) => [["item", n], ...mats.map(([mid, cnt]) => [mid, cnt * n - Math.min(Math.max(0, +XF.owned[mid] || 0), cnt * n)])];
 const trackedFlip = D => FT.find(f => !f.archived && f.state !== "sold" && f.id === D.id && f.a === D.a && f.b === D.b && (f.q || 1) === D.q);
+function relistFlip(f, v) {
+  v = Math.floor(+v || 0);
+  if (v < 1) return;
+  const keep = f.plan.sale ? f.plan.net / f.plan.sale : 1;
+  f.plan.sale0 ??= f.plan.sale;
+  f.plan.listAt = v; f.plan.sale = v; f.plan.net = v * keep;
+  f.relists = (f.relists || 0) + 1;
+  f.t.listed = Date.now();
+  saveFT();
+  renderFlips();
+}
 function advanceFlip(f) {
   f.state = FT_STATES[FT_STATES.indexOf(f.state) + 1];
   f.t[f.state] = Date.now();
@@ -2270,12 +2282,14 @@ function renderFinish() {
       : f.state === "enchanted" ? `List ${f.n} in <b>${esc(f.sellCity)}</b> at <b class="mono">${fmt(listAt)}</b>`
       : undercut ? `<span class="old">Undercut:</span> someone lists at ${fmt(nb.nowV)}. Relist at <b class="mono">${fmt(nb.nowV - 1)}</b>; total profit becomes ${signed(f.n * ((nb.nowV - 1) * keep - nb.cost))}.`
       : `Waiting to sell in ${esc(f.sellCity)}${hrs != null ? `, listed ${hrs ? hrs + " h" : "under an hour"} ago` : ""}`;
-    return `<li data-i="${FT.indexOf(f)}">${icon(priceId(f.id, f.b), 32)}<div class="who"><b>${f.n} × ${esc(nameOf(f.id))}</b><span class="sub">${Q}T${e.t}.${f.a} → .${f.b}</span></div><div class="todo">${todo}</div><button class="${f.state === "listed" ? "" : "primary"}" data-go="1">${BTN[f.state]}</button></li>`;
+    return `<li data-i="${FT.indexOf(f)}">${icon(priceId(f.id, f.b), 32)}<div class="who"><b>${f.n} × ${esc(nameOf(f.id))}</b><span class="sub">${Q}T${e.t}.${f.a} → .${f.b}</span></div><div class="todo">${todo}</div>${undercut ? `<button class="primary" data-relist="${nb.nowV - 1}">Relisted at ${fmt(nb.nowV - 1)}</button>` : ""}<button class="${f.state === "listed" ? "" : "primary"}" data-go="1">${BTN[f.state]}</button></li>`;
   }).join("")}</ul>`;
   box.querySelectorAll("li[data-i]").forEach(li => {
     const f = FT[+li.dataset.i];
     li.onclick = () => { openFlip({ id: f.id, a: f.a, b: f.b, n: f.n, q: f.q || 1, pin: { buy: f.buyCity, sell: f.sellCity, mats: Object.fromEntries(f.mats.map(m => [m[0], m[2]])) } }); $("x-detail").scrollIntoView({ behavior: "smooth", block: "start" }) };
     li.querySelector("[data-go]").onclick = ev => { ev.stopPropagation(); advanceFlip(f) };
+    const rl = li.querySelector("[data-relist]");
+    if (rl) rl.onclick = ev => { ev.stopPropagation(); relistFlip(f, rl.dataset.relist) };
   });
 }
 
@@ -2423,7 +2437,9 @@ function renderFlipDetail() {
       <div class="acts"><button class="primary" data-step="buy">I bought it all</button>${tracked ? "" : '<button data-step="save">Save for later</button>'}<button id="xd-copy">Copy shopping list</button></div>`),
     stepItem(1, "Enchant", `${N} at the Artifact Foundry`, `${carry}<p>${buy.mats.map((m, i) => `.${+D.a + i} → .${+D.a + i + 1} with <b>${m.cnt} ${matWord(m.mid)}</b> each`).join(", then ")}. Put in only as many items as you have materials for.</p>${(() => { const take = buy.mats.map(m => [m.mid, Math.min(owned(m.mid), m.cnt * N)]).filter(x => x[1]); return take.length ? `<p class="calm">Pressing Enchanted takes ${take.map(([m, n]) => `${fmt(n)} ${esc(nameOf(m))}`).join(", ")} out of My materials.</p>` : "" })()}<div class="acts"><button class="primary" data-step="next">Enchanted</button></div>`),
     stepItem(2, instantSale ? "Sell" : "List", `${N} in ${esc(sell.s)}`, `<p>${instantSale ? "Sell instantly" : "List a sell order"} at <b class="pay">${fmt(listAt)}</b>${sell.sale.flag === "avg" ? ` <span class="age" style="display:inline">counted at its usual price of ${fmt(sell.sale.v)}</span>` : ""}. You keep <b class="mono">${fmt(N * sell.sale.net)}</b> after fees.</p><div class="acts"><button class="primary" data-step="next">${instantSale ? "Sold" : "Listed"}</button></div>`),
-    stepItem(3, "Collect", "when they sell", `<div class="acts"><label class="own">Sold at <input type="number" id="xd-sold" value="${Math.round(tracked && tracked.plan.listAt || listAt)}"></label><button class="primary" data-step="next">All sold</button></div>`)
+    stepItem(3, "Collect", "when they sell", `<div class="acts"><label class="own">Listed at <input type="number" id="xd-listed" min="1" value="${Math.round(tracked && tracked.plan.listAt || listAt)}"></label><button data-step="relist">Update price</button>${tracked && tracked.relists ? `<span class="calm">relisted ${tracked.relists}×</span>` : ""}</div>
+      <p class="calm">Undercut? Type your new price and press Update price. The profit of this flip follows it.</p>
+      <div class="acts"><label class="own">Sold at <input type="number" id="xd-sold" value="${Math.round(tracked && tracked.plan.listAt || listAt)}"></label><button class="primary" data-step="next">All sold</button></div>`)
   ];
   const facts = `<dl class="facts">
     <div><dt>Profit</dt><dd class="big">${signed(total)}</dd><span class="sub">${signed(profit)} each</span></div>
@@ -2500,6 +2516,7 @@ function wireDetail(ctx) {
   box.querySelectorAll("button[data-step]").forEach(b => b.onclick = () => {
     const act = b.dataset.step;
     if (act === "save") return newEntry("planned");
+    if (act === "relist") return relistFlip(ctx.tracked, $("xd-listed").value);
     if (act === "buy" && !ctx.tracked) return newEntry("bought");
     if (ctx.tracked.state === "listed" && $("xd-sold")) ctx.tracked.sold = +$("xd-sold").value || ctx.tracked.plan.sale;
     advanceFlip(ctx.tracked);
