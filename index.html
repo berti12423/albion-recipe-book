@@ -219,6 +219,9 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
 .buy .qty, .pay { font-family: var(--mono); font-weight: 500 }
 .limit { font: .85rem var(--mono); color: var(--warn); white-space: nowrap }
 .calm { color: var(--muted); font-size: .9rem }
+.buy td.got { white-space: nowrap; font: .9rem var(--mono) }
+.buy td.got input { width: 5.5rem; text-align: right; font: 500 .9rem var(--mono); padding: 2px 5px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px }
+.buy td.got.done input { border-color: var(--good) }
 .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px }
 .booklist { margin: 6px 0 0; padding-left: 18px; font-size: .92rem }
 .alts { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
@@ -2035,6 +2038,7 @@ function pickFlips(leads) {
 }
 
 // ---------- flips in progress: one sentence and one button each ----------
+const buyTargets = (n, mats) => [["item", n], ...mats.map(([mid, cnt]) => [mid, cnt * n - Math.min(Math.max(0, +XF.owned[mid] || 0), cnt * n)])];
 const trackedFlip = D => FT.find(f => !f.archived && f.state !== "sold" && f.id === D.id && f.a === D.a && f.b === D.b && (f.q || 1) === D.q);
 function advanceFlip(f) {
   f.state = FT_STATES[FT_STATES.indexOf(f.state) + 1];
@@ -2093,7 +2097,10 @@ function renderFinish() {
     const e = DB.items[f.id], nb = trackerNumbers(f), Q = f.q ? QUAL_NAMES[f.q - 1] + " " : "", listAt = f.plan.listAt || f.plan.sale, keep = f.plan.sale ? f.plan.net / f.plan.sale : 1;
     const undercut = f.state === "listed" && nb.nowV && nb.nowV < listAt;
     const hrs = f.t.listed ? Math.round((Date.now() - f.t.listed) / 36e5) : null;
-    const todo = f.state === "planned" ? `Buy ${f.n} × ${Q}T${e.t}.${f.a} in <b>${esc(f.buyCity)}</b>`
+    const bt = buyTargets(f.n, f.mats.map(m => [m[0], m[1]])), gotN = k => f.got ? +f.got[k] || 0 : 0;
+    const part = bt.filter(([k, t]) => t && gotN(k) && gotN(k) < t).map(([k, t]) => `${k === "item" ? "items" : matWord(k)} ${fmt(gotN(k))}/${fmt(t)}`);
+    const prog = f.got && Object.values(f.got).some(x => +x) ? ` · <span class="pos">${bt.filter(([k, t]) => gotN(k) >= t).length} of ${bt.length} bought</span>${part.length ? " · " + part.join(", ") : ""}` : "";
+    const todo = f.state === "planned" ? `Buy ${f.n} × ${Q}T${e.t}.${f.a} in <b>${esc(f.buyCity)}</b>${prog}`
       : f.state === "bought" ? `Enchant ${f.n} to .${f.b} at the Artifact Foundry`
       : f.state === "enchanted" ? `List ${f.n} in <b>${esc(f.sellCity)}</b> at <b class="mono">${fmt(listAt)}</b>`
       : undercut ? `<span class="old">Undercut:</span> someone lists at ${fmt(nb.nowV)}. Relist at <b class="mono">${fmt(nb.nowV - 1)}</b>; total profit becomes ${signed(f.n * ((nb.nowV - 1) * keep - nb.cost))}.`
@@ -2220,14 +2227,17 @@ function renderFlipDetail() {
     extra += w.cost + w.short * w.last - n * v;
     bookNotes.push(`<li><b>${esc(name)}:</b> ${w.parts.slice(0, 4).map(([t, x]) => `${fmt(t)} at ${fmt(x)}`).join(" · ")}${w.parts.length > 4 ? ` · +${w.parts.length - 4} more prices` : ""}${w.short ? ` <span class="old">only ${fmt(n - w.short)} of ${fmt(n)} listed</span>` : ""}</li>`);
   };
+  const gotOf = k => tracked && tracked.got ? +tracked.got[k] || 0 : 0;
+  const gotCell = (k, t) => !t ? '<td class="r got"><span class="calm">in stock</span></td>'
+    : `<td class="r got${gotOf(k) >= t ? " done" : ""}"><input type="number" min="0" max="${t}" step="1" data-got="${k}" value="${gotOf(k) || ""}" placeholder="0" aria-label="How many bought so far"> / ${fmt(t)} ${gotOf(k) >= t ? '<span class="pos">✓</span>' : `<button class="link" data-gotall="${k}" title="Mark this line as fully bought">all</button>`}</td>`;
   const itemName = `${Q} T${it.t}.${D.a} ${e.name}`, itemAge = ageText(buy.item.d);
-  rowsBuy.push(`<tr><td><span class="qty">${fmt(N)}</span> × ${esc(itemName)}</td><td>${esc(buy.item.city)}</td><td class="r"><b class="pay">${fmt(buy.item.v)}</b>${itemAge ? `<span class="age ${itemAge.old ? "old" : ""}">${itemAge.text}</span>` : ""}</td><td class="r mono">${fmt(N * buy.item.v)}</td><td class="r"><span class="limit">above ${fmt(Math.floor(buy.item.v + profit))}</span></td></tr>`);
+  rowsBuy.push(`<tr><td><span class="qty">${fmt(N)}</span> × ${esc(itemName)}</td><td>${esc(buy.item.city)}</td><td class="r"><b class="pay">${fmt(buy.item.v)}</b>${itemAge ? `<span class="age ${itemAge.old ? "old" : ""}">${itemAge.text}</span>` : ""}</td><td class="r mono">${fmt(N * buy.item.v)}</td><td class="r"><span class="limit">above ${fmt(Math.floor(buy.item.v + profit))}</span></td>${gotCell("item", N)}</tr>`);
   checkBook(bookFor(priceId(e.id, D.a), buy.item.city, q), itemName, N, buy.item.v);
   lines.push(`${buy.item.city}: ${N} × ${itemName} ≤ ${fmt(buy.item.v)}`);
   for (const m of buy.mats) {
     const need = m.cnt * N, have = Math.min(owned(m.mid), need), get = need - have;
     saved += have * m.v;
-    rowsBuy.push(`<tr><td><span class="qty">${fmt(get)}</span> × ${esc(nameOf(m.mid))}<label class="own">I own <input type="number" min="0" step="1" data-own="${m.mid}" value="${XF.owned[m.mid] || ""}" placeholder="0"></label></td><td>${esc(m.city)}</td><td class="r"><b class="pay">${fmt(m.v)}</b>${(() => { const a = ageText((getPrice(m.city, m.mid) || {}).d); return a ? `<span class="age ${a.old ? "old" : ""}">${a.text}</span>` : "" })()}</td><td class="r mono">${fmt(get * m.v)}</td><td class="r"><span class="limit">above ${fmt(Math.floor(m.v + profit / m.cnt))}</span></td></tr>`);
+    rowsBuy.push(`<tr><td><span class="qty">${fmt(get)}</span> × ${esc(nameOf(m.mid))}<label class="own">I own <input type="number" min="0" step="1" data-own="${m.mid}" value="${XF.owned[m.mid] || ""}" placeholder="0"></label></td><td>${esc(m.city)}</td><td class="r"><b class="pay">${fmt(m.v)}</b>${(() => { const a = ageText((getPrice(m.city, m.mid) || {}).d); return a ? `<span class="age ${a.old ? "old" : ""}">${a.text}</span>` : "" })()}</td><td class="r mono">${fmt(get * m.v)}</td><td class="r"><span class="limit">above ${fmt(Math.floor(m.v + profit / m.cnt))}</span></td>${gotCell(m.mid, get)}</tr>`);
     if (get) { checkBook(bookFor(m.mid, m.city, 1), nameOf(m.mid), get, m.v); lines.push(`${m.city}: ${fmt(get)} × ${nameOf(m.mid)} ≤ ${fmt(m.v)}`) }
   }
   const listAt = isBM(sell.s) || XF.sellBy === "instant" ? sell.sale.v : Math.max(1, (sell.sale.listed || sell.sale.v) - 1), instantSale = isBM(sell.s) || XF.sellBy === "instant";
@@ -2241,7 +2251,7 @@ function renderFlipDetail() {
   const places = [...new Set([buy.item.city, ...buy.mats.map(m => m.city)])], red = places.some(c => RED.has(c)) || RED.has(sell.s);
   const carry = places.length > 1 || places[0] !== sell.s ? `<p>Route: ${[XF.start, ...trip.order].filter((c, i, a) => c && c !== a[i - 1]).map(esc).join(" → ")}, about <b>${Math.round(trip.min)} min</b>${red ? ' <span class="old">(red-zone trip)</span>' : ""}.</p>` : "";
   const steps = [
-    stepItem(0, "Buy", `everything for ${N} flips`, `<div class="tablewrap"><table class="buy"><thead><tr><th>What</th><th>Where</th><th class="r">Pay up to</th><th class="r">Cost</th><th class="r">Loses money</th></tr></thead><tbody>${rowsBuy.join("")}</tbody></table></div>
+    stepItem(0, "Buy", `everything for ${N} flips`, `<div class="tablewrap"><table class="buy"><thead><tr><th>What</th><th>Where</th><th class="r">Pay up to</th><th class="r">Cost</th><th class="r">Loses money</th><th class="r">Bought</th></tr></thead><tbody>${rowsBuy.join("")}</tbody></table></div>
       ${bookNotes.length ? `<details class="fold" data-k="book"${(D.open || {}).book ? " open" : ""}><summary>Live order quantities</summary><ul class="booklist">${bookNotes.join("")}</ul></details>` : ""}
       ${noLive ? `<p class="calm">No live quantities yet for ${noLive === rowsBuy.length ? "these" : noLive + " of these"}; check how many are listed in game.</p>` : ""}
       ${thin ? `<p class="old">Only about ${va < 10 ? va.toFixed(1) : fmt(va)} of these ${Q} .${D.a} trade a day in ${esc(buy.item.city)}, so buying ${N} may take days or cost more.</p>` : ""}
@@ -2302,7 +2312,7 @@ function wireDetail(ctx) {
   box.querySelectorAll("input[data-own]").forEach(inp => inp.onchange = () => { XF.owned[inp.dataset.own] = Math.max(0, +inp.value || 0); saveXF(); renderFlipDetail(); renderTracker(); renderStock() });
   if ($("xd-copy")) $("xd-copy").onclick = () => copyText(box.dataset.list, $("xd-copy"));
   $("xd-recipe").onclick = () => { level = D.b; show("recipes"); open(D.id, true) };
-  const newEntry = state => {
+  const newEntry = (state, quiet) => {
     const now = Date.now(), f = { k: now, id: D.id, a: D.a, b: D.b, q: D.q, n: ctx.N, buyCity: ctx.buy.item.city, sellCity: ctx.sell.s,
       mats: ctx.buy.mats.map(m => [m.mid, m.cnt, m.city, m.v]), plan: { item: ctx.buy.item.v, cost: ctx.buy.cost, sale: ctx.sell.sale.v, net: ctx.sell.sale.net, listAt: ctx.listAt },
       paid: null, sold: null, state, t: { planned: now } };
@@ -2310,8 +2320,18 @@ function wireDetail(ctx) {
     FT.unshift(f);
     D.auto = false;
     saveFT();
-    renderFlips();
+    if (!quiet) renderFlips();
+    return f;
   };
+  const setGot = (k, v) => {
+    const f = ctx.tracked || newEntry("planned", true), t = buyTargets(f.n, f.mats.map(m => [m[0], m[1]]));
+    const cap = (t.find(x => x[0] === k) || [k, 0])[1];
+    (f.got ||= {})[k] = Math.max(0, Math.min(cap, Math.floor(v)));
+    saveFT();
+    if (f.state === "planned" && t.every(([kk, tt]) => (f.got[kk] || 0) >= tt)) advanceFlip(f); else renderFlips();
+  };
+  box.querySelectorAll("input[data-got]").forEach(i => i.onchange = () => setGot(i.dataset.got, +i.value || 0));
+  box.querySelectorAll("button[data-gotall]").forEach(b => b.onclick = () => setGot(b.dataset.gotall, Infinity));
   box.querySelectorAll("button[data-step]").forEach(b => b.onclick = () => {
     const act = b.dataset.step;
     if (act === "save") return newEntry("planned");
@@ -2386,7 +2406,7 @@ function renderTracker() {
       if (a === "next") return advanceFlip(f);
       if (a === "del") { if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Sure?"; return } FT.splice(FT.indexOf(f), 1) }
       else if (a === "archive") f.archived = true;
-      else if (a === "dup") FT.unshift({ ...structuredClone(f), k: Date.now(), paid: null, sold: null, archived: false, state: "planned", used: null, t: { planned: Date.now() } });
+      else if (a === "dup") FT.unshift({ ...structuredClone(f), k: Date.now(), paid: null, sold: null, archived: false, state: "planned", used: null, got: null, t: { planned: Date.now() } });
       else if (a === "open") { openFlip({ id: f.id, a: f.a, b: f.b, n: f.n, q: f.q || 1, pin: { buy: f.buyCity, sell: f.sellCity, mats: Object.fromEntries(f.mats.map(m => [m[0], m[2]])) } }); $("x-detail").scrollIntoView({ behavior: "smooth", block: "start" }); return }
       saveFT(); renderTracker();
     });
