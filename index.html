@@ -227,6 +227,15 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
 .fold > summary { cursor: pointer; padding: 4px 0 }
 .fold[open] > summary { color: var(--accent) }
 .fliplist { max-height: 72vh; overflow: auto }
+.stock { position: fixed; top: 0; right: 0; z-index: 50; height: 100vh; width: min(460px, 100vw); overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(0,0,0,.45); padding: 14px 16px; box-sizing: border-box }
+.stock .shead { display: flex; justify-content: space-between; align-items: center }
+.stock h3 { font: 700 1.3rem var(--display); margin: 0 }
+.sgrid { display: grid; grid-template-columns: 32px repeat(4, minmax(0, 1fr)); gap: 6px; align-items: center; margin: 10px 0 }
+.sgrid .kh { font-size: .8rem; color: var(--muted); text-align: center }
+.sgrid .th { font: 500 .95rem var(--mono); color: var(--muted) }
+.sgrid .cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg) }
+.sgrid .cell.has { border-color: var(--accent); background: var(--accent-soft) }
+.sgrid .cell input { width: 100%; box-sizing: border-box; text-align: center; font: 500 .95rem var(--mono); padding: 3px 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 5px }
 .fliptable td { white-space: nowrap; padding-block: 5px }
 .fliptable .nm { min-width: 0 }
 .fliptable .name { display: block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; font-weight: 500 }
@@ -406,8 +415,10 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
     <label class="xsilver">I have <input id="x-budget" type="number" min="0" step="100000" placeholder="any amount"> silver to spend</label>
     <span class="scope" id="x-scope"></span>
     <button class="primary" id="x-scan">Scan prices</button>
+    <button id="x-stock-toggle">My materials</button>
     <button id="x-tracker-toggle">Tracker</button>
   </div>
+  <aside class="stock" id="x-stock" hidden aria-label="My enchanting materials"></aside>
   <details class="filters"><summary>Change what's searched</summary>
     <div class="fgrid">
       <label class="fld">Search<input id="x-q" type="search" placeholder="e.g. bow, hood" autocomplete="off"></label>
@@ -1714,6 +1725,9 @@ function setupFlips() {
   $("x-refresh").onclick = () => scanFlips("shown");
   $("x-full").onclick = () => scanFlips("all");
   $("x-tracker-toggle").onclick = () => { $("x-tracker").hidden = !$("x-tracker").hidden; store.set("flipTrackOpen", !$("x-tracker").hidden); renderTracker(); if (!$("x-tracker").hidden) $("x-tracker").scrollIntoView({ behavior: "smooth" }) };
+  $("x-stock-toggle").onclick = () => { $("x-stock").hidden = !$("x-stock").hidden; renderStock() };
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape" && !$("x-stock").hidden) { $("x-stock").hidden = true } });
+  renderStock();
   $("x-tracker").hidden = !store.get("flipTrackOpen");
   renderTracker();
   priceCacheReady.then(() => { if (!flipScan && FETCHED.size) { flipScan = { items: flipItems() }; renderFlips() } });
@@ -2026,6 +2040,35 @@ function advanceFlip(f) {
   saveFT();
   renderFlips();
 }
+const STOCK_KINDS = [["RUNE", "Runes"], ["SOUL", "Souls"], ["RELIC", "Relics"], ["SHARD_AVALONIAN", "Avalonian shards"]];
+function renderStock() {
+  const box = $("x-stock"), btn = $("x-stock-toggle"), have = Object.values(XF.owned).filter(x => +x > 0).length;
+  if (btn) btn.textContent = have ? `My materials (${have})` : "My materials";
+  if (box.hidden) return;
+  const city = XF.start || "Fort Sterling";
+  let worth = 0, priced = true;
+  for (const [mid, n] of Object.entries(XF.owned)) if (+n > 0) { const pr = getPrice(city, mid); if (pr && pr.s) worth += n * pr.s; else priced = false }
+  box.innerHTML = `<div class="shead"><h3>My materials</h3><button class="link" id="xs-close" aria-label="Close">✕</button></div>
+    <p class="note">What you already have. Flip plans and the shopping list buy only the rest.</p>
+    <div class="sgrid"><span></span>${STOCK_KINDS.map(([, w]) => `<span class="kh">${w}</span>`).join("")}
+    ${[4, 5, 6, 7, 8].map(t => `<span class="th">T${t}</span>${STOCK_KINDS.map(([k]) => {
+      const mid = `T${t}_${k}`, v = +XF.owned[mid] || 0;
+      return `<label class="cell${v ? " has" : ""}" title="${esc(nameOf(mid))}">${icon(mid, 40)}<input type="number" min="0" step="1" data-stock="${mid}" value="${v || ""}" placeholder="0" aria-label="${esc(nameOf(mid))}"></label>`;
+    }).join("")}`).join("")}</div>
+    <p class="note">${worth ? `Worth about <b class="mono">${fmt(worth)}</b> at ${esc(city)} prices${priced ? "" : " (some have no price yet)"}.` : ""} Avalonian shards take items from .3 to .4; flips here stop at .3.</p>`;
+  $("xs-close").onclick = () => { box.hidden = true };
+  box.querySelectorAll("input[data-stock]").forEach(inp => inp.onchange = () => {
+    const v = Math.max(0, Math.floor(+inp.value || 0));
+    if (v) XF.owned[inp.dataset.stock] = v; else delete XF.owned[inp.dataset.stock];
+    saveXF();
+    if (flipDetail) renderFlipDetail();
+    renderTracker();
+    renderStock();
+    const again = $("x-stock").querySelector(`input[data-stock="${inp.dataset.stock}"]`);
+    const next = again && again.closest(".cell").nextElementSibling;
+    if (next && next.querySelector && next.querySelector("input")) next.querySelector("input").focus();
+  });
+}
 function renderFinish() {
   const box = $("x-finish"), act = FT.filter(f => !f.archived && f.state !== "sold");
   box.hidden = !act.length;
@@ -2235,7 +2278,7 @@ function wireDetail(ctx) {
   box.querySelectorAll("button[data-alt]").forEach(b => b.onclick = () => openFlip(flipArgs(flipAlts[+b.dataset.alt].r)));
   if (!ctx) return;
   $("xd-n").onchange = () => { D.n = Math.max(1, +$("xd-n").value || 1); D.auto = false; renderFlipDetail() };
-  box.querySelectorAll("input[data-own]").forEach(inp => inp.onchange = () => { XF.owned[inp.dataset.own] = Math.max(0, +inp.value || 0); saveXF(); renderFlipDetail(); renderTracker() });
+  box.querySelectorAll("input[data-own]").forEach(inp => inp.onchange = () => { XF.owned[inp.dataset.own] = Math.max(0, +inp.value || 0); saveXF(); renderFlipDetail(); renderTracker(); renderStock() });
   if ($("xd-copy")) $("xd-copy").onclick = () => copyText(box.dataset.list, $("xd-copy"));
   $("xd-recipe").onclick = () => { level = D.b; show("recipes"); open(D.id, true) };
   const newEntry = state => {
