@@ -159,11 +159,13 @@ async function prices(ids, locs, quals) {
 }
 async function histories(ids, locs, scale) {
   const now = Date.now(), stale = ids.filter(id => locs.some(l => { const h = history.get(l + "|" + id); return !h || h.t < now - HIST_TTL }));
+  let failed = false;
   await Promise.all(chunks(stale, 2000).filter(c => c.length).map(c => enqueue(urgent, async () => {
     const rows = await getJson(API + "history/" + c.map(encodeURIComponent).join(",") + ".json?locations=" + CITIES.map(encodeURIComponent).join(",") + "&time-scale=" + scale), got = {};
     for (const r of rows) (got[r.location + "|" + r.item_id] ??= []).push(r);
     for (const id of c) for (const l of CITIES) history.set(l + "|" + id, { t: Date.now(), rows: got[l + "|" + id] || [] });
-  }).catch(e => log("history: " + e.message))));
+  }).catch(e => { failed = true; log("history: " + e.message) })));
+  if (failed && ids.some(id => locs.some(l => !history.has(l + "|" + id)))) throw new Error("history could not be loaded");
   return ids.flatMap(id => locs.flatMap(l => history.get(l + "|" + id)?.rows || []));
 }
 

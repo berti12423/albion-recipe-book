@@ -233,6 +233,36 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
 .fold > summary { cursor: pointer; padding: 4px 0 }
 .fold[open] > summary { color: var(--accent) }
 .fliplist { max-height: 72vh; overflow: auto }
+.dgrid { display: grid; grid-template-columns: 36px repeat(3, minmax(0, 1fr)); gap: 8px; align-items: stretch }
+.dgrid .kh { font-size: .9rem; color: var(--muted); text-align: center } .dgrid .kh small { font-family: var(--mono) }
+.dgrid .th { font: 500 1rem var(--mono); color: var(--muted); align-self: center }
+.dcell { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 10px; row-gap: 1px; align-items: center; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: inherit; font: inherit; min-width: 0 }
+.dcell .ico { grid-row: 1 / span 2 }
+.dcell > span { grid-column: 2; min-width: 0 } .dcell .dbar, .dcell .rank { grid-column: auto }
+.dcell .dbig { font: 500 1.25rem/1.2 var(--mono) } .dcell .dbig.ok { color: var(--muted); font-family: var(--body) }
+.dcell .dbar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--bg); margin: 4px 0 2px; overflow: hidden }
+.dbar i { display: block; height: 100%; background: var(--accent) } .dbar i.full { background: var(--good) }
+.dcell .sub { grid-column: 1 / -1 }
+.dcell.h2 { background: color-mix(in srgb, var(--accent) 9%, var(--panel)) } .dcell.h3 { background: color-mix(in srgb, var(--accent) 18%, var(--panel)) }
+.dcell.top { border-color: var(--accent) }
+.dcell .rank { position: absolute; top: 6px; right: 8px; font: 500 .8rem var(--mono); color: var(--bg); background: var(--accent); border-radius: 99px; width: 1.4rem; height: 1.4rem; display: grid; place-items: center }
+.dcell.none { border-style: dashed; opacity: .45 }
+button.dcell:hover { border-color: var(--accent) }
+.dtable td { white-space: nowrap } .dtable td b { font-weight: 500; color: var(--accent) }
+.dcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 12px }
+.finder .card.dcard { padding: 12px 14px }
+.dcard h4 { margin: 0 0 8px; font: 500 .8rem var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }
+.dcard h4 ~ h4 { margin-top: 16px }
+.brow { display: grid; grid-template-columns: 110px minmax(40px, 1fr) 96px 120px; gap: 10px; align-items: center; width: 100%; padding: 4px 0; background: none; border: 0; color: inherit; font: inherit; text-align: left }
+button.brow:hover .bl { color: var(--accent); text-decoration: underline }
+.bbar { height: 10px; background: var(--bg); border-radius: 3px; overflow: hidden } .bbar i { display: block; height: 100%; background: var(--accent) }
+.brow .bv { text-align: right } .brow .bn { font-size: .85rem; color: var(--muted); white-space: nowrap }
+.dstrip { display: flex; height: 14px; border-radius: 4px; overflow: hidden; gap: 2px } .dstrip i { display: block; min-width: 3px }
+.dlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: .85rem; color: var(--muted) }
+.dlegend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px }
+.dstrip .q1, .dlegend .q1 { background: #6f7a75 } .dstrip .q2, .dlegend .q2 { background: #5f9e8f } .dstrip .q3, .dlegend .q3 { background: #5b8fc7 } .dstrip .q4, .dlegend .q4 { background: #b08ad6 } .dstrip .q5, .dlegend .q5 { background: #d9a441 }
+.dstrip .gA, .dlegend .gA { background: var(--good) } .dstrip .gB, .dlegend .gB { background: var(--e2) } .dstrip .gC, .dlegend .gC { background: var(--accent) } .dstrip .gD, .dlegend .gD { background: var(--warn) }
+.dfolds { padding: 0 }
 .stock { position: fixed; top: 0; right: 0; z-index: 50; height: 100vh; width: min(460px, 100vw); overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(0,0,0,.45); padding: 14px 16px; box-sizing: border-box }
 .stock .shead { display: flex; justify-content: space-between; align-items: center }
 .stock h3 { font: 700 1.3rem var(--display); margin: 0 }
@@ -329,6 +359,7 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
   <button role="tab" id="tab-finder" data-view="finder" aria-selected="false">Profit finder</button>
   <button role="tab" id="tab-mats" data-view="mats" aria-selected="false">Material costs</button>
   <button role="tab" id="tab-flips" data-view="flips" aria-selected="false">Enchant flips</button>
+  <button role="tab" id="tab-data" data-view="data" aria-selected="false">Flip data</button>
   <button role="tab" id="tab-guide" data-view="guide" aria-selected="false">Guide</button>
   <button role="tab" id="tab-crafting" data-view="crafting" aria-selected="false">Crafting path<span class="pct" id="pct-crafting"></span></button>
   <button role="tab" id="tab-island" data-view="island" aria-selected="false">Island path<span class="pct" id="pct-island"></span></button>
@@ -458,6 +489,7 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
   <section class="card tracker" id="x-tracker" hidden></section>
 </section>
 
+<section id="view-data" class="finder flips" hidden></section>
 <section id="view-guide" class="guide" hidden>
   <div class="path-head"><div><h2>Crafting profit guide</h2>
     <p>Everything that matters for making silver with crafting, in one page. Drawn from about 250 videos and shorts by Nendys, a crafter with over 7 years and billions of silver made, checked against the game files where numbers are involved.</p></div></div>
@@ -925,7 +957,7 @@ function nav(hash) {
 }
 // Restore the page for a hash: a tab name, or a recipe id with an optional @enchantment.
 function route(h) {
-  if (PATHS[h] || ["finder", "guide", "mats", "flips"].includes(h)) return show(h, true);
+  if (PATHS[h] || ["finder", "guide", "mats", "flips", "data"].includes(h)) return show(h, true);
   const [id, l] = h.split("@");
   if (!DB || !DB.items[id]) return;
   level = l && DB.items[id].r[l] ? l : "0";
@@ -1963,6 +1995,7 @@ const cityShort = c => ({ "Fort Sterling": "FS", "Martlock": "ML", "Thetford": "
 function renderFlips() {
   const out = $("x-out"), n = $("x-note");
   renderTracker();
+  if (view === "data") renderData();
   $("x-scope").textContent = [XF.tier ? "Tier " + XF.tier : "All tiers", XF.cat ? pretty(XF.cat) : "", XF.q ? `“${XF.q}”` : ""].filter(Boolean).join(" · ");
   if (!flipScan) { out.innerHTML = ""; return }
   const res = flipResCache = flipResults();
@@ -2059,6 +2092,138 @@ function advanceFlip(f) {
   saveFT();
   renderFlips();
 }
+// ---------- data tab: what to stock up on ----------
+// One day of the best set of flips that don't compete with each other: every finished item is sold once (20% of its
+// daily sales), every starting item bought no more than it trades, and one silver budget and one stock shared by all.
+function stockPlan() {
+  const res = flipResults(), budget = +XF.budget || 0, own = {};
+  for (const [k, v] of Object.entries(XF.owned)) if (+v > 0) own[k] = +v;
+  const open = FT.filter(f => !f.archived && f.state !== "sold");
+  for (const f of open) if (f.state === "planned" || f.state === "bought") for (const [mid, cnt] of f.mats) if (own[mid]) own[mid] = Math.max(0, own[mid] - cnt * f.n);
+  const busy = new Set(open.map(f => f.id + "|" + f.b + "|" + (f.q || 1)));
+  const cand = res.filter(r => r.profit > 0 && "AB".includes(r.grade.g) && !busy.has(r.e.id + "|" + r.b + "|" + r.q))
+    .sort((a, b) => budget > 0 ? b.margin - a.margin : b.profit - a.profit);
+  let silver = budget > 0 ? budget : Infinity;
+  const sellCap = new Map(), buyCap = new Map(), chosen = [], mats = {};
+  for (const r of cand) {
+    const ks = r.e.id + "|" + r.b + "|" + r.q, kb = r.e.id + "|" + r.a + "|" + r.q;
+    if (!sellCap.has(ks)) sellCap.set(ks, Math.max(1, Math.floor(r.vol * 0.2)));
+    if (!buyCap.has(kb)) buyCap.set(kb, r.buyVol == null ? Infinity : Math.floor(r.buyVol));
+    const cost = n => n * r.buy.item.v + r.buy.mats.reduce((s, m) => s + Math.max(0, n * m.cnt - (own[m.mid] || 0)) * m.v, 0);
+    let n = Math.min(sellCap.get(ks), buyCap.get(kb));
+    while (n > 0 && cost(n) > silver) n--;
+    if (n <= 0) continue;
+    silver -= cost(n);
+    sellCap.set(ks, sellCap.get(ks) - n); buyCap.set(kb, buyCap.get(kb) - n);
+    let covered = true;
+    for (const m of r.buy.mats) {
+      const need = n * m.cnt, use = Math.min(own[m.mid] || 0, need), buy = need - use;
+      if (use) own[m.mid] -= use;
+      if (buy) covered = false;
+      const x = mats[m.mid] ??= { mid: m.mid, need: 0, use: 0, buy: 0, cost: 0, flips: 0, profit: 0, ceil: [], city: {} };
+      x.need += need; x.use += use; x.buy += buy; x.cost += buy * m.v; x.flips++; x.profit += n * r.profit;
+      x.ceil.push([m.v + r.profit / m.cnt, need]);
+      x.city[m.city] = (x.city[m.city] || 0) + need;
+    }
+    chosen.push({ r, n, covered, profit: n * r.profit });
+  }
+  for (const x of Object.values(mats)) {
+    // The price at which half of this material's use stops paying.
+    x.ceil.sort((a, b) => a[0] - b[0]);
+    let acc = 0; x.max = x.ceil[0][0];
+    for (const [v, q] of x.ceil) { acc += q; x.max = v; if (acc >= x.need / 2) break }
+    x.where = Object.entries(x.city).sort((a, b) => b[1] - a[1])[0][0];
+    const pr = getPrice(x.where, x.mid) || {};
+    x.v = pr.s || null; x.d = pr.d; x.bid = pr.b || null; x.bd = pr.bd;
+  }
+  return { res, cand, chosen, mats, profit: chosen.reduce((s, c) => s + c.profit, 0), matCost: Object.values(mats).reduce((s, x) => s + x.cost, 0),
+    spent: budget > 0 ? budget - silver : chosen.reduce((s, c) => s + c.n * c.r.buy.cost, 0) };
+}
+
+const DATA_KINDS = [["RUNE", "Runes", ".0 → .1"], ["SOUL", "Souls", ".1 → .2"], ["RELIC", "Relics", ".2 → .3"]];
+const matLabel = mid => `T${mid[1]} ${matWord(mid)}`;
+function renderData() {
+  const box = $("view-data");
+  if (!DB) return;
+  if (!flipScan) {
+    box.innerHTML = `<div class="xstatus"><h2>Flip data</h2></div><p class="note">This page is worked out from the Enchant flips scan. Scan prices first.</p><div><button class="primary" id="d-scan">Scan prices</button></div>`;
+    $("d-scan").onclick = () => { show("flips"); scanFlips(false) };
+    return;
+  }
+  const P = stockPlan(), all = Object.values(P.mats), short = all.filter(x => x.buy > 0).sort((a, b) => b.profit - a.profit), budget = +XF.budget || 0;
+  const scope = [XF.tier ? "Tier " + XF.tier : "All tiers", XF.cat ? pretty(XF.cat) : "All gear", XF.cities.length === 1 ? XF.cities[0] : XF.cities.length + " cities", budget > 0 ? fmt(budget) + " silver" : "no silver limit"].join(" · ");
+  const head = `<div class="xstatus"><h2>Flip data</h2><span class="scope">Uses your Enchant flips settings: ${esc(scope)}</span><button id="d-flips">Change settings</button></div>`;
+  if (!P.chosen.length) {
+    box.innerHTML = head + `<section class="job"><p class="jmsg">No confident flips (grade A or B, with profit) with these settings right now, so there's nothing to stock up for. Try more cities or press Scan prices on the Enchant flips tab.</p></section>`;
+    $("d-flips").onclick = () => show("flips");
+    return;
+  }
+  const tierAvg = P.chosen.reduce((s, c) => s + c.r.e.it.t * c.profit, 0) / P.profit, covered = P.chosen.filter(c => c.covered).length;
+  const say = short.slice(0, 2).map(x => `${fmt(x.buy)} ${matLabel(x.mid)}`).join(" and ");
+  const feeds = new Set(P.chosen.filter(c => c.r.buy.mats.some(m => short.slice(0, 2).some(x => x.mid === m.mid))).map(c => c.r)).size;
+  const answer = short.length ? `Buy ${say}` : "Your stock covers today's flips";
+  const sub = short.length ? `${short.length > 2 ? `and ${short.length - 2} more below. ` : ""}Those ${short.length > 1 ? "two feed" : "feed"} ${feeds} of the ${P.chosen.length} flips worth doing in a day.${budget > 0 ? "" : " No silver limit is set, so this is everything the market could take; set your silver on the Enchant flips tab to fit it to what you can spend."}` : `${P.chosen.length} flips, no materials to buy.`;
+  const rank = new Map(short.slice(0, 3).map((x, i) => [x.mid, i + 1])), heatMax = Math.max(...all.map(x => x.profit), 1);
+  const cellOf = (t, k) => {
+    const mid = `T${t}_${k}`, x = P.mats[mid], have = +XF.owned[mid] || 0;
+    if (!x) return `<div class="dcell none" title="No flip in the plan uses ${esc(nameOf(mid))}">${icon(mid, 40)}<span class="dbig">—</span><span class="sub">${have ? "have " + fmt(have) : "not used"}</span></div>`;
+    const heat = x.profit / heatMax > 0.66 ? 3 : x.profit / heatMax > 0.33 ? 2 : 1;
+    return `<button class="dcell h${heat}${rank.has(mid) ? " top" : ""}" data-tier="${t}" title="${esc(nameOf(mid))}: used by ${x.flips} flips">${rank.has(mid) ? `<span class="rank">${rank.get(mid)}</span>` : ""}${icon(mid, 40)}
+      <span class="dbig${x.buy ? "" : " ok"}">${x.buy ? "Buy " + fmt(x.buy) : "Enough"}</span>
+      <span class="sub">need ${fmt(x.need)} · have ${fmt(have)}</span>
+      <span class="dbar"><i style="width:${Math.round(Math.min(1, x.use / x.need) * 100)}%" class="${x.buy ? "" : "full"}"></i></span>
+      <span class="sub">pay up to <b class="mono">${fmt(Math.floor(x.max))}</b>${x.v ? ` · now ${fmt(x.v)}` : ""}</span>
+      <span class="sub pos">${x.flips} flips · ${signed(x.profit)}/day</span></button>`;
+  };
+  const grid = `<div class="dgrid"><span></span>${DATA_KINDS.map(([, w, s]) => `<span class="kh">${w} <small>${s}</small></span>`).join("")}
+    ${[4, 5, 6, 7, 8].map(t => `<span class="th">T${t}</span>${DATA_KINDS.map(([k]) => cellOf(t, k)).join("")}`).join("")}</div>`;
+  const ageOf = d => { const a = ageText(d); return a ? `<span class="age ${a.old ? "old" : ""}">${a.text}</span>` : "" };
+  const shopRow = x => `<tr><td><div class="mat">${icon(x.mid, 32)}<div class="nm"><span class="name">${esc(nameOf(x.mid))}</span><span class="age">${x.flips} flips · ${signed(x.profit)}/day</span></div></div></td>
+    <td class="num">${fmt(x.need)}</td><td class="num">${fmt(+XF.owned[x.mid] || 0)}</td><td class="num"><b>${fmt(x.buy)}</b></td><td>${esc(x.where)}</td>
+    <td class="num">${x.buy ? fmt(x.cost) : "—"}<span class="age">${x.buy ? fmt(Math.round(x.cost / x.buy)) + " each" : ""}</span>${x.buy ? ageOf(x.d) : ""}</td>
+    <td class="num">${x.buy && x.bid ? fmt(Math.round(x.buy * x.bid * (1 + SETUP))) : "—"}<span class="age">${x.buy && x.bid ? fmt(x.bid) + " each + 2.5% fee" : ""}</span>${x.buy && x.bid ? ageOf(x.bd) : ""}</td>
+    <td class="num">${fmt(Math.floor(x.max))}</td></tr>`;
+  const shopHead = `<thead><tr><th>Material</th><th class="num">Need</th><th class="num">Have</th><th class="num">Buy</th><th>Where</th><th class="num">Buy now</th><th class="num">With a buy order</th><th class="num">Pay up to</th></tr></thead>`;
+  const shop = short.length ? `<div class="band"><h3>Shopping list</h3></div><div class="card"><div class="tablewrap"><table class="fliptable dtable">${shopHead}<tbody>${short.slice(0, 5).map(shopRow).join("")}</tbody></table></div></div>
+    <p class="note">"Buy now" uses the cheapest listing for every unit, so large amounts will cost more. "With a buy order" is today's highest buy order plus the 2.5% fee; it's cheaper but fills over time.</p>` : "";
+  // Breakdowns of the plan itself, so sums are of flips that don't compete with each other.
+  const group = (key, label, order) => {
+    const m = new Map();
+    for (const c of P.chosen) { const k = key(c.r), g = m.get(k) || { k, n: 0, profit: 0, margin: 0 }; g.n++; g.profit += c.profit; g.margin += c.r.margin; m.set(k, g) }
+    const rows = [...m.values()].sort(order || ((a, b) => b.profit - a.profit)), max = Math.max(...rows.map(g => g.profit), 1);
+    return rows.map(g => ({ ...g, label: label(g.k), w: Math.round(g.profit / max * 100) }));
+  };
+  const bars = (title, rows, attr) => `<div class="card dcard"><h4>${title}</h4>${rows.map(g => `<${attr ? "button" : "div"} class="brow" ${attr ? `${attr}="${esc(String(g.k))}"` : ""}><span class="bl">${esc(g.label)}</span><span class="bbar"><i style="width:${g.w}%"></i></span><span class="bv mono pos">${signed(g.profit)}</span><span class="bn">${g.n} flip${g.n > 1 ? "s" : ""} · ${Math.round(g.margin / g.n * 100)}%</span></${attr ? "button" : "div"}>`).join("")}</div>`;
+  const strip = (title, rows, cls) => { const tot = rows.reduce((s, g) => s + g.n, 0);
+    return `<h4>${title}</h4><div class="dstrip">${rows.map((g, i) => `<i class="${cls(g, i)}" style="width:${g.n / tot * 100}%" title="${esc(g.label)}: ${g.n} flips"></i>`).join("")}</div><div class="dlegend">${rows.map((g, i) => `<span><i class="${cls(g, i)}"></i>${esc(g.label)} ${g.n}</span>`).join("")}</div>` };
+  const breakdowns = `<div class="band"><h3>Where the profit is</h3><span class="scope">per day, among the ${P.chosen.length} flips in the plan · bar = profit, % = average margin</span></div><div class="dcards">
+    ${bars("By tier", group(r => r.e.it.t, k => "Tier " + k, (a, b) => a.k - b.k), "data-settier")}
+    ${bars("By type", group(r => r.e.it.c, pretty), "data-setcat")}
+    ${bars("By enchant step", group(r => `.${r.a} → .${r.b}`, k => k, (a, b) => a.k < b.k ? -1 : 1))}
+    <div class="card dcard">${strip("By quality", group(r => r.q, k => QUAL_NAMES[k - 1], (a, b) => a.k - b.k), g => "q" + g.k)}${strip("By confidence", group(r => r.grade.g, k => "Grade " + k, (a, b) => a.k < b.k ? -1 : 1), g => "g" + g.k)}</div></div>`;
+  const match = flipItems(), scanned = match.filter(e => flipScan.items.includes(e)).length, priced = flipResults(true).length;
+  const folds = `<div class="folds dfolds"><details class="fold"><summary>Every material, full numbers</summary><div class="tablewrap"><table class="fliptable dtable">${shopHead}<tbody>${all.sort((a, b) => a.mid < b.mid ? -1 : 1).map(shopRow).join("")}</tbody></table></div></details>
+    <details class="fold"><summary>How this is counted</summary><ul class="booklist">
+    <li>${match.length} items match your settings, ${scanned} of them were in the last scan. ${priced} flips have prices, ${P.res.length} pass your filters and the sales check, ${P.cand.length} are grade A or B, and ${P.chosen.length} fit into one day's plan.</li>
+    <li>The plan sells each finished item once: 20% of what sells a day at that quality, shared by every way of making it (.0, .1 or .2 start). It never buys more of a starting item than trades in a day${budget > 0 ? `, and all flips share your ${fmt(budget)} silver` : ""}.</li>
+    <li>Your stock is used once across the whole plan, after setting aside what flips in your tracker still need. Flips already in the tracker are left out.</li>
+    <li>"Pay up to" is the price where half of that material's use stops making a profit. Above it, most of these flips lose money.</li>
+    <li>This is one day at today's prices and reflects your cities and filters. Sales per day come from players who upload market data, so real sales are usually higher.</li></ul></details></div>`;
+  box.innerHTML = head + `<section class="job"><div class="jhead"><div class="t"><span class="tag">Stock up</span><h3>${esc(answer)}</h3><span class="sub">${esc(sub)}</span></div></div>
+    <dl class="facts"><div><dt>Profit a day</dt><dd class="big">${signed(P.profit)}</dd><span class="sub">${P.chosen.length} flips</span></div>
+    <div><dt>Materials to buy</dt><dd>${fmt(P.matCost)}</dd><span class="sub">${short.length} kind${short.length === 1 ? "" : "s"} short</span></div>
+    <div><dt>Silver for the whole plan</dt><dd>${fmt(P.spent)}</dd><span class="sub">items and materials</span></div>
+    <div><dt>Covered by your stock</dt><dd>${covered} of ${P.chosen.length}</dd><span class="sub">flips needing no materials</span></div>
+    <div><dt>Average tier</dt><dd>T${tierAvg.toFixed(1)}</dd><span class="sub">weighted by profit</span></div></dl></section>
+    <div class="band"><h3>What the flips need</h3><button class="link" id="d-stock">Edit my materials</button></div>${grid}${shop}${breakdowns}${folds}`;
+  const toFlips = (key, id, val) => { XF[key] = val; $(id).value = val; saveXF(); show("flips"); renderFlips(); scrollTo(0, 0) };
+  $("d-flips").onclick = () => show("flips");
+  $("d-stock").onclick = () => { show("flips"); $("x-stock").hidden = false; renderStock() };
+  box.querySelectorAll("button.dcell").forEach(b => b.onclick = () => toFlips("tier", "x-tier", b.dataset.tier));
+  box.querySelectorAll("[data-settier]").forEach(b => b.onclick = () => toFlips("tier", "x-tier", b.dataset.settier));
+  box.querySelectorAll("[data-setcat]").forEach(b => b.onclick = () => toFlips("cat", "x-cat", b.dataset.setcat));
+}
+
 const STOCK_KINDS = [["RUNE", "Runes"], ["SOUL", "Souls"], ["RELIC", "Relics"], ["SHARD_AVALONIAN", "Avalonian shards"]];
 function renderStock() {
   const box = $("x-stock"), btn = $("x-stock-toggle"), have = Object.values(XF.owned).filter(x => +x > 0).length;
@@ -2603,12 +2768,13 @@ function goalOut() {
 
 function show(v, fromHistory) {
   view = v;
-  for (const k of ["recipes", "finder", "mats", "flips", "guide", "crafting", "island"]) {
+  for (const k of ["recipes", "finder", "mats", "flips", "data", "guide", "crafting", "island"]) {
     $("view-" + k).hidden = k !== v;
     $("tab-" + k).setAttribute("aria-selected", k === v);
   }
-  $("settings").hidden = !(v === "recipes" || v === "finder" || v === "mats" || v === "flips");
+  $("settings").hidden = !(v === "recipes" || v === "finder" || v === "mats" || v === "flips" || v === "data");
   if (v === "mats" && DB) renderMats();
+  if (v === "data" && DB) renderData();
   if (PATHS[v]) renderPath(v);
   if (!fromHistory) nav(v === "recipes" ? (current ? cardHash() : "") : v);
   store.set("view", v);
@@ -2623,7 +2789,7 @@ $("g-bonus").innerHTML = `<table><thead><tr><th>City</th><th>Crafting +15%</th><
 }).join("")}</tbody></table>`;
 {
   const h = location.hash.slice(1);
-  show(PATHS[h] || ["finder", "guide", "mats", "flips"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")), !!h);
+  show(PATHS[h] || ["finder", "guide", "mats", "flips", "data"].includes(h) ? h : (h ? "recipes" : (store.get("view") || "recipes")), !!h);
 }
 
 if (LOCAL) {
