@@ -305,6 +305,9 @@ button.brow:hover .bl { color: var(--accent); text-decoration: underline }
 .tracker { padding: 14px 16px; margin-top: 4px }
 .tracker h3 { margin: 0; font: 700 1.15rem var(--display) }
 .shop { white-space: pre-wrap; font: .85rem var(--mono); background: var(--bg); border-radius: 8px; padding: 10px 12px; margin: 6px 0 }
+.money { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 6px 0 10px }
+.money > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px }
+.money span { font-size: 12px; color: var(--muted) } .money b { font-size: 22px } .money em { font-style: normal; font-size: 12px; color: var(--muted) }
 .tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-top: 10px }
 .tcard { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--bg) }
 .tcard.s-sold { opacity: .75 }
@@ -2559,13 +2562,26 @@ function trackerNumbers(f) {
   const nowV = at ? (isBM(f.sellCity) ? at.b : at.s) : null;
   return { cost, expected: f.n * (f.plan.net - f.plan.cost - (f.plan.lost || 0)), actual: soldNet != null ? f.n * (soldNet - cost) : null, nowV, nowD: at && (isBM(f.sellCity) ? at.bd : at.d) };
 }
+function moneyTotals() {
+  const t = { spent: 0, earned: 0, profit: 0, tied: 0, sold: 0, open: 0 };
+  for (const f of FT) {
+    if (f.state === "planned") continue;
+    const nb = trackerNumbers(f), out = f.n * nb.cost;
+    t.spent += out;
+    if (f.state === "sold" && f.sold != null) { t.earned += f.n * f.sold * (f.plan.sale ? f.plan.net / f.plan.sale : 1 - TAX() - SETUP); t.profit += nb.actual; t.sold++ }
+    else if (f.state === "sold") { t.earned += f.n * f.plan.net; t.profit += f.n * f.plan.net - out; t.sold++ } // sold without a price typed in: the plan's sale
+    else { t.tied += out; t.open++ }
+  }
+  return t;
+}
 function renderTracker() {
   const box = $("x-tracker");
   if (!box) return;
   const btn = $("x-tracker-toggle");
   const active = FT.filter(f => f.state !== "sold" && !f.archived), done = FT.filter(f => f.state === "sold");
   const realised = done.reduce((s, f) => s + (trackerNumbers(f).actual ?? 0), 0);
-  if (btn) btn.textContent = `Tracker (${active.length})`;
+  const M = moneyTotals();
+  if (btn) btn.textContent = `Tracker (${active.length})${M.sold ? " · " + (M.profit >= 0 ? "+" : "−") + fmt(Math.abs(Math.round(M.profit))) + " made" : ""}`;
   if (DB) renderFinish();
   if (box.hidden) return;
   // Combined shopping list for everything still to buy, minus materials you own.
@@ -2581,6 +2597,12 @@ function renderTracker() {
   const merged = Object.fromEntries(Object.entries(shop).map(([c, xs]) => { const m = {}; for (const [n, q, v] of xs) { m[n] ??= [0, v]; m[n][0] += q; m[n][1] = Math.max(m[n][1], v) } return [c, m] }));
   const shopText = Object.entries(merged).map(([c, m]) => c + ": " + Object.entries(m).map(([n, [q, v]]) => `${fmt(q)} × ${n} ≤ ${fmt(v)}`).join(", ")).join("\n");
   let html = `<div class="dhead"><h3>Tracker</h3><div class="controls"><button id="xt-reprice">Re-check prices</button>${shopText ? '<button id="xt-copy">Copy shopping list</button>' : ""}<button id="xt-export">Export</button><button id="xt-import">Import</button></div></div>
+    <div class="money">
+      <div><span>Spent</span><b class="mono">${fmt(Math.round(M.spent))}</b><em>on ${M.sold + M.open} flip${M.sold + M.open === 1 ? "" : "s"} bought so far</em></div>
+      <div><span>Earned</span><b class="mono">${fmt(Math.round(M.earned))}</b><em>from ${M.sold} sold, after tax and fees</em></div>
+      <div><span>Profit</span><b class="mono ${M.profit < 0 ? "old" : "pos"}">${(M.profit >= 0 ? "+" : "−") + fmt(Math.abs(Math.round(M.profit)))}</b><em>earned minus what those sold flips cost</em></div>
+      <div><span>Still out</span><b class="mono">${fmt(Math.round(M.tied))}</b><em>in ${M.open} flip${M.open === 1 ? "" : "s"} not sold yet</em></div>
+    </div>
     <p class="note">${active.length} in progress · expected ${signed(active.reduce((s, f) => s + trackerNumbers(f).expected, 0))} · realised so far ${signed(realised)} from ${done.length} sold flips.</p>`;
   if (shopText) html += `<details class="more" open><summary>Shopping list for planned flips${Object.values(XF.owned).some(x => +x) ? " (minus what you own)" : ""}</summary><pre class="shop">${esc(shopText)}</pre></details>`;
   if (!FT.length) html += `<p class="empty">Nothing here yet. Flips appear when you press "I bought it all" or "Save for later".</p>`;
