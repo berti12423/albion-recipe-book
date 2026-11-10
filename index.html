@@ -173,6 +173,8 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
 .xstatus h2 { font: 700 1.35rem/1.15 var(--display); margin: 0 }
 .xsilver { display: inline-flex; align-items: center; gap: 8px; font-size: 1.05rem }
 .xsilver input { width: 9rem; background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; padding: 6px 9px; font: 500 1rem var(--mono) }
+.xcities { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+.xcities > span { color: var(--muted); font-size: .95rem }
 .xstatus .scope { flex: 1 1 180px; min-width: 0; color: var(--muted); font-size: .95rem }
 .flips details.filters > summary { cursor: pointer; color: var(--accent); width: max-content }
 .flips details.filters[open] { display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px }
@@ -264,7 +266,7 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
 .fliptable tr.subflip td:first-child { padding-left: 30px }
 .fliptable tr.subflip { background: var(--bg) }
 .fliptable tr[data-i]:hover, .fliptable tr.sel { background: var(--accent-soft) }
-.fliptable thead th { position: sticky; top: 0; background: var(--panel); z-index: 1 }
+.fliptable thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; box-shadow: inset 0 -1px 0 var(--line), 0 6px 10px -6px rgba(0,0,0,.6) }
 .tracker { padding: 14px 16px; margin-top: 4px }
 .tracker h3 { margin: 0; font: 700 1.15rem var(--display) }
 .shop { white-space: pre-wrap; font: .85rem var(--mono); background: var(--bg); border-radius: 8px; padding: 10px 12px; margin: 6px 0 }
@@ -419,6 +421,7 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
     <button id="x-tracker-toggle">Tracker</button>
   </div>
   <aside class="stock" id="x-stock" hidden aria-label="My enchanting materials"></aside>
+  <div class="xcities"><span>Cities</span><div class="chips" id="x-cities"></div></div>
   <details class="filters"><summary>Change what's searched</summary>
     <div class="fgrid">
       <label class="fld">Search<input id="x-q" type="search" placeholder="e.g. bow, hood" autocomplete="off"></label>
@@ -431,7 +434,6 @@ b.mono, td.num b, .total td.num { font-weight: 500 }
       <label class="fld">Minutes to a neighbouring city<input id="x-hop" type="number" min="1" step="1"></label>
       <label class="fld">Your time, silver per hour (0 = ignore travel)<input id="x-timeval" type="number" min="0" step="100000"></label>
     </div>
-    <div class="fld">Cities to use<div class="chips" id="x-cities"></div></div>
     <div class="fgrid nums">
       <label class="fld">Min sold / day<input id="x-vol" type="number" min="0" step="1"></label>
       <label class="fld">Min profit each<input id="x-minprofit" type="number" step="500"></label>
@@ -1957,7 +1959,7 @@ const cityShort = c => ({ "Fort Sterling": "FS", "Martlock": "ML", "Thetford": "
 function renderFlips() {
   const out = $("x-out"), n = $("x-note");
   renderTracker();
-  $("x-scope").textContent = [XF.tier ? "Tier " + XF.tier : "All tiers", XF.cat ? pretty(XF.cat) : "", XF.cities.length === 1 ? XF.cities[0] : XF.cities.length + " cities", XF.q ? `“${XF.q}”` : ""].filter(Boolean).join(" · ");
+  $("x-scope").textContent = [XF.tier ? "Tier " + XF.tier : "All tiers", XF.cat ? pretty(XF.cat) : "", XF.q ? `“${XF.q}”` : ""].filter(Boolean).join(" · ");
   if (!flipScan) { out.innerHTML = ""; return }
   const res = flipResCache = flipResults();
   // One row per finished item at one quality: its best starting enchantment first, the others folded under it.
@@ -2015,7 +2017,7 @@ const flipArgs = r => ({ id: r.e.id, a: r.a, b: r.b, n: r.amount || 1, q: r.q, r
 function pickFlips(leads) {
   const busy = new Set(FT.filter(f => !f.archived && f.state !== "sold").map(f => f.id + "|" + f.b + "|" + (f.q || 1)));
   const free = leads.filter(r => r.total > 0 && !busy.has(r.e.id + "|" + r.b + "|" + r.q));
-  const solid = free.filter(r => "AB".includes(r.grade.g) && (r.buyVol == null || r.buyVol >= r.amount * 0.5));
+  const solid = free.filter(r => "AB".includes(r.grade.g) && (r.buyVol == null || r.buyVol >= r.amount));
   const pool = (solid.length ? solid : free).slice().sort((a, b) => b.score - a.score);
   flipBest = pool[0] || null;
   flipAlts = [];
